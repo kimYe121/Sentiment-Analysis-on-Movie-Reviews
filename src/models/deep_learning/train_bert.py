@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.preprocess import prepare_dataframe
-from src.utils import DATA_DIR, set_seed
+from common.preprocess import prepare_dataframe
+from common.utils import TRAIN_PATH, set_seed
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="BERT fine-tuning skeleton.")
-    parser.add_argument("--train_path", type=str, default=str(DATA_DIR / "train.tsv" / "train.tsv"))
+    parser.add_argument("--train_path", type=str, default=str(TRAIN_PATH))
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--max_samples", type=int, default=10000)

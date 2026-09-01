@@ -8,6 +8,8 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 RESULTS_DIR = ROOT_DIR / "results"
+TRAIN_PATH = DATA_DIR / "train.tsv"
+TEST_PATH = DATA_DIR / "test.tsv"
 
 
 def set_seed(seed: int = 42) -> None:
@@ -33,9 +35,9 @@ def ensure_dirs() -> None:
 def load_data(train_path: str | Path | None = None, test_path: str | Path | None = None):
     """读取训练和测试数据。"""
     if train_path is None:
-        train_path = DATA_DIR / "train.tsv" / "train.tsv"
+        train_path = TRAIN_PATH
     if test_path is None:
-        test_path = DATA_DIR / "test.tsv" / "test.tsv"
+        test_path = TEST_PATH
 
     train_df = pd.read_csv(train_path, sep='\t')
     test_df = pd.read_csv(test_path, sep='\t')

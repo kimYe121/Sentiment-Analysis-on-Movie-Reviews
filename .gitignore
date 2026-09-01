@@ -24,11 +24,12 @@ results/*.json
 report/*.pdf
 
 # Data files (raw datasets) - do not upload large TSV files
-# Ignore all data content under the data directory.
-data/
+# Ignore data contents, but keep the directory itself.
+data/*
+!data/
+!data/.gitkeep
 
 # Keep directories if empty
 !results/.gitkeep
 !notebooks/.gitkeep
 !report/.gitkeep
-!data/.gitkeep
