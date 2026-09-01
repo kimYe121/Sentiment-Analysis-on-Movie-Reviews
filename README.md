@@ -99,13 +99,29 @@ SentimentAnalysisOnMovieReviews/
 
 ### 1. 环境配置
 
+#### 方式一（推荐）：uv
+
+```bash
+uv venv
+.venv\Scripts\Activate.ps1
+uv pip install -r requirements.txt
+```
+
+也可以用 `uv run` 免激活直接在项目环境中执行脚本：
+
+```bash
+uv run python src/models/deep_learning/train_textcnn.py --exp_name base
+```
+
+#### 方式二：pip
+
 ```bash
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-国内网络下载 HuggingFace 模型建议设置镜像：
+国内网络下载 HuggingFace 模型建议设置镜像（PowerShell）：
 
 ```powershell
 $env:HF_ENDPOINT = "https://hf-mirror.com"
