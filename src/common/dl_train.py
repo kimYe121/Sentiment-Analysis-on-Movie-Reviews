@@ -42,7 +42,8 @@ def predict(model, ids: np.ndarray, device, batch_size: int = 512,
             logits = model(batch)
             all_logits.append(logits.float().cpu())
             if labels is not None:
-                yb = torch.from_numpy(labels[sl]).to(device)
+                # pandas 2.x 的 to_numpy() 可能返回只读数组，切片后需保证可写
+                yb = torch.from_numpy(np.ascontiguousarray(labels[sl])).to(device)
                 total_loss += manual_cross_entropy(logits, yb).item() * len(batch)
                 seen += len(batch)
     logits = torch.cat(all_logits)
