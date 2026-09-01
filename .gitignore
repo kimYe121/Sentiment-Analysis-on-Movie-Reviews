@@ -17,19 +17,16 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Project outputs
-results/*.csv
-results/*.png
-results/*.json
-report/*.pdf
-
-# Data files (raw datasets) - do not upload large TSV files
-# Ignore data contents, but keep the directory itself.
+# Data files (raw datasets) - do not upload; keep the directory via .gitkeep
 data/*
-!data/
 !data/.gitkeep
 
-# Keep directories if empty
+# Experiment outputs (metrics, plots, predictions, submissions)
+results/*
 !results/.gitkeep
-!notebooks/.gitkeep
+
+# Course report artifacts
+report/*
 !report/.gitkeep
+
+# Notebooks (experiment records) stay tracked

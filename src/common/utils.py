@@ -4,10 +4,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# 本文件位于 src/common/ 下，向上两级即仓库根目录
+ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 RESULTS_DIR = ROOT_DIR / "results"
+SPLIT_DIR = DATA_DIR / "split"
 TRAIN_PATH = DATA_DIR / "train.tsv"
 TEST_PATH = DATA_DIR / "test.tsv"
 
@@ -28,8 +29,9 @@ def set_seed(seed: int = 42) -> None:
 
 
 def ensure_dirs() -> None:
-    """确保结果目录存在。"""
+    """确保结果目录与划分目录存在。"""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    SPLIT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_data(train_path: str | Path | None = None, test_path: str | Path | None = None):
