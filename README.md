@@ -155,13 +155,26 @@ python src/models/classical/train_logistic_regression.py --exp_name base
 # 其余经典模型请参照 train_logistic_regression.py 模板实现
 ```
 
-### 5. 汇总与可视化
+### 5. 实验编排（推荐）
+
+课程设计的全部实验已组织进 `scripts/run_experiments.py`，按实验组执行、自动跳过已完成的实验：
+
+```bash
+python scripts/run_experiments.py --group nn_compare --dry_run   # 预览将执行的命令
+python scripts/run_experiments.py --group nn_compare             # 手写 vs nn.LSTM 对照
+python scripts/run_experiments.py --group grouped                # 分组划分对照（无泄漏指标）
+python scripts/run_experiments.py --group ablation               # 参数消融矩阵（课设要求）
+```
+
+实验组定义见脚本内 `GROUPS`，新增实验只需在其中加一行。
+
+### 6. 汇总与可视化
 
 ```bash
 python src/evaluation/aggregator.py
 ```
 
-### 6. 单个实验的评估与混淆矩阵
+### 7. 单个实验的评估与混淆矩阵
 
 ```bash
 python src/evaluation/evaluate.py --pred_path results/dl/textcnn/base/pred_val.csv --label_path results/dl/textcnn/base/label_val.csv --output_dir results/dl/textcnn/base
