@@ -55,20 +55,19 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
 
 ## 二、实验计划总表（本设计的全部实验）
 
-| 实验组 | 实验 | 目的 | 状态 |
+| 实验组 | 做什么 | 目的 | 状态 |
 |---|---|---|---|
-| base | TextCNN / BiLSTM / BERT 各一个 | 三模型正式结果（主对比表） | ✅ 0.6750 / 0.6765 / 0.7044 |
-| nn_compare | BiLSTM `--impl nn` | 手写 vs 库：精度等价性 + 速度差距 | ✅ 0.6730（手写慢约 19 倍） |
-| grouped | 三模型 `--mode grouped` | 无泄漏指标；与 Kaggle 榜同口径 | ✅ 0.6099 / 0.6263 / 🔄 BERT 跑批中 |
-| ablation | 15 个消融（见下） | **课设硬性要求：参数与配置对比** | ⬜ 待启动 |
-| 改进实验 | 句子上下文融合（自设计） | 加分项：自主改进且有提升效果 | ⬜ 待实现 |
-| Kaggle 提交 | 各模型 submission.csv | 外部真值校验 | ⬜ 待提交 |
+| base（主实验） | TextCNN / BiLSTM / BERT 各跑一次 | 三模型正式成绩与完整指标 → 报告主对比表 | ✅ 0.6750 / 0.6765 / 0.7044 |
+| nn_compare（库对照） | BiLSTM `--impl nn`，跑一次 | 证明手写实现正确（精度接近）并量化与 cuDNN 的速度差（约 19 倍） | ✅ 0.6730 |
+| grouped（防泄漏对照） | TextCNN / BiLSTM 以 `--mode grouped` 重跑 | 量化两种划分的指标落差（泄漏效应） | ✅ 0.6099 / 0.6263 |
+| ablation（消融） | 每个模型改一个参数重跑，共 5 个约 30 分钟 | **课设硬性要求：参数与配置对比** | ⬜ 待启动 |
+| 可选 | Kaggle 提交（零 GPU）；句子上下文融合（加分项，暂缓） | 外部分数 / 加分 | ⬜ 可选 |
 
-消融矩阵（每次只改一个参数，与 base 对比即得该参数的影响）：
+消融清单（每次只改一个参数，与同模型 base 对比即得该参数的影响）：
 
-- TextCNN：`--num_filters 64/256`、`--dropout 0.3/0.7`、`--kernel_sizes 2,3,4,5`、`--weight_decay 0.01`
-- BiLSTM：`--hidden_size 64/256`、`--pooling mean/last`（对照 attention）、`--num_layers 2`、`--bidirectional 0`
-- BERT：`--lr 3e-5/5e-5`、`--max_len 32`（均 2 轮，base 已证明第 2 轮到顶）
+- TextCNN：`--num_filters 256`（模型容量）、`--dropout 0.7`（正则化强度）
+- BiLSTM：`--hidden_size 256`（模型容量）、`--pooling mean`（池化方式，对照 attention）
+- BERT：`--max_len 32`（输入长度配置，约 15 分钟；为满足"每个算法都有参数对比"，如需进一步省时可删除）
 
 ---
 
@@ -248,9 +247,9 @@ python src/evaluation/evaluate.py --pred_path results/dl/textcnn/base/pred_val.c
 - ✅ 深度学习三模型实现（手写为主）+ 数值一致性验证
 - ✅ BiLSTM 效率优化（3.4×）与手写 vs 库对照实验
 - ✅ base 实验：TextCNN 0.6750 / BiLSTM 0.6765 / BERT 0.7044（stratified 验证集，多数类基线 0.512）
-- ✅ grouped 对照：TextCNN 0.6099 / BiLSTM 0.6263 / BERT 进行中
-- ⬜ 参数消融矩阵（15 个，编排脚本就绪）
-- ⬜ 句子上下文融合改进实验、Kaggle 提交、课程报告
+- ✅ grouped 对照：TextCNN 0.6099 / BiLSTM 0.6263（BERT 版已裁撤）
+- ⬜ 消融实验（5 个，约 30 分钟，编排脚本就绪）
+- ⬜ 课程报告；可选：Kaggle 提交、句子上下文融合
 
 ## 十一、参考方向
 

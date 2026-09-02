@@ -40,28 +40,21 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
         ("dl", "bilstm", "base_nn", "src/models/deep_learning/train_bilstm.py --exp_name base_nn --impl nn --batch_size 128"),
     ],
     "grouped": [
+        # 防泄漏对照。BERT 版已裁撤（省 25 分钟），两项已完成的数据足够支撑泄漏分析
         ("dl", "textcnn", "base_grouped", "src/models/deep_learning/train_textcnn.py --exp_name base_grouped --mode grouped"),
         ("dl", "bilstm", "base_grouped", "src/models/deep_learning/train_bilstm.py --exp_name base_grouped --mode grouped"),
-        ("dl", "bert", "base_grouped", "src/models/deep_learning/train_bert.py --exp_name base_grouped --mode grouped"),
     ],
     "ablation": [
-        # ---- TextCNN：控制 batch/epochs 与 base 一致，每次只改一个参数 ----
-        ("dl", "textcnn", "filters64", "src/models/deep_learning/train_textcnn.py --exp_name filters64 --num_filters 64"),
+        # 课设硬性要求：每个模型改一个参数做对比（与同模型 base 相比即得该参数的影响）。
+        # 精简原则：每个模型只留最有解释力的参数，总计约 30 分钟 GPU 时间。
+        # ---- TextCNN：模型容量 与 正则化 ----
         ("dl", "textcnn", "filters256", "src/models/deep_learning/train_textcnn.py --exp_name filters256 --num_filters 256"),
-        ("dl", "textcnn", "dropout03", "src/models/deep_learning/train_textcnn.py --exp_name dropout03 --dropout 0.3"),
         ("dl", "textcnn", "dropout07", "src/models/deep_learning/train_textcnn.py --exp_name dropout07 --dropout 0.7"),
-        ("dl", "textcnn", "kernels2345", "src/models/deep_learning/train_textcnn.py --exp_name kernels2345 --kernel_sizes 2,3,4,5"),
-        ("dl", "textcnn", "wd001", "src/models/deep_learning/train_textcnn.py --exp_name wd001 --weight_decay 0.01"),
-        # ---- BiLSTM：batch 128 与优化后默认一致 ----
-        ("dl", "bilstm", "hidden64", "src/models/deep_learning/train_bilstm.py --exp_name hidden64 --hidden_size 64"),
+        # ---- BiLSTM：容量 与 池化方式（mean 对照 attention，支撑报告改进叙事）----
         ("dl", "bilstm", "hidden256", "src/models/deep_learning/train_bilstm.py --exp_name hidden256 --hidden_size 256"),
         ("dl", "bilstm", "pool_mean", "src/models/deep_learning/train_bilstm.py --exp_name pool_mean --pooling mean"),
-        ("dl", "bilstm", "pool_last", "src/models/deep_learning/train_bilstm.py --exp_name pool_last --pooling last"),
-        ("dl", "bilstm", "layers2", "src/models/deep_learning/train_bilstm.py --exp_name layers2 --num_layers 2"),
-        ("dl", "bilstm", "unidirectional", "src/models/deep_learning/train_bilstm.py --exp_name unidirectional --bidirectional 0"),
-        # ---- BERT：2 轮即可（base 的过拟合拐点在第 2 轮）----
-        ("dl", "bert", "lr3e5", "src/models/deep_learning/train_bert.py --exp_name lr3e5 --lr 3e-5 --epochs 2"),
-        ("dl", "bert", "lr5e5", "src/models/deep_learning/train_bert.py --exp_name lr5e5 --lr 5e-5 --epochs 2"),
+        # ---- BERT：只保留一个配置对比（约 15 分钟），满足"每个算法都有参数对比"；
+        #      想进一步省时间可删除本行，BERT 以 base 的复现结果参与对比 ----
         ("dl", "bert", "maxlen32", "src/models/deep_learning/train_bert.py --exp_name maxlen32 --max_len 32 --epochs 2"),
     ],
 }
