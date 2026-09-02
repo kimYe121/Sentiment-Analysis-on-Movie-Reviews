@@ -37,9 +37,20 @@ class ManualLSTMCell(nn.Module):
         with torch.no_grad():
             self.bias_ih[hidden_size:2 * hidden_size].fill_(1.0)
 
-    def forward(self, x: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]):
+    def project_input(self, x: torch.Tensor) -> torch.Tensor:
+        """输入投影 x @ W_ih^T + b_ih。
+
+        支持对整条序列 (B, T, in) 一次性预计算，把大矩阵乘法移出时间循环，
+        循环内只剩递归项的小矩阵乘法（工程优化，数学上与逐步计算完全等价）。
+        """
+        return x @ self.weight_ih.T + self.bias_ih
+
+    def forward(self, x: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor],
+                x_proj: torch.Tensor | None = None):
+        """x_proj 为已预计算的输入投影；传入时跳过重复计算。"""
         h_prev, c_prev = state
-        gates = x @ self.weight_ih.T + self.bias_ih + h_prev @ self.weight_hh.T + self.bias_hh
+        gates = (x_proj if x_proj is not None else self.project_input(x)) \
+            + h_prev @ self.weight_hh.T + self.bias_hh
         i, f, g, o = gates.chunk(4, dim=1)
         i = torch.sigmoid(i)
         f = torch.sigmoid(f)
@@ -67,21 +78,25 @@ class ManualBiLSTM(nn.Module):
         # x: (B, T, in) -> (B, T, out)
         batch, seq_len = x.shape[0], x.shape[1]
 
+        # 工程优化：输入投影对整条序列一次性完成（一次大 GEMM），
+        # 时间循环内只剩 h @ W_hh 的递归小矩阵乘法，显著减少 kernel 发射次数
+        f_proj = self.forward_cell.project_input(x)
         h = torch.zeros(batch, self.hidden_size, device=x.device, dtype=x.dtype)
         c = torch.zeros_like(h)
         forward_states = []
         for t in range(seq_len):
-            h, c = self.forward_cell(x[:, t], (h, c))
+            h, c = self.forward_cell(x[:, t], (h, c), x_proj=f_proj[:, t])
             forward_states.append(h)
 
         if not self.bidirectional:
             return torch.stack(forward_states, dim=1)
 
+        b_proj = self.backward_cell.project_input(x)
         h = torch.zeros(batch, self.hidden_size, device=x.device, dtype=x.dtype)
         c = torch.zeros_like(h)
         backward_states = [None] * seq_len
         for t in range(seq_len - 1, -1, -1):
-            h, c = self.backward_cell(x[:, t], (h, c))
+            h, c = self.backward_cell(x[:, t], (h, c), x_proj=b_proj[:, t])
             backward_states[t] = h
 
         return torch.cat([torch.stack(forward_states, dim=1),
@@ -206,3 +221,35 @@ def verify_manual_bilstm(vocab_size: int = 50, embed_dim: int = 16,
         # 与 mask 无关的纯数值一致性检查）
         ref_logits = ref_fc(ref_out.mean(dim=1))
     return (mine_logits - ref_logits).abs().max().item()
+
+
+def benchmark_vs_nn_lstm(vocab_size: int = 5000, embed_dim: int = 128,
+                         hidden_size: int = 128, batch_size: int = 64,
+                         seq_len: int = 48, iters: int = 20) -> dict:
+    """手写 BiLSTM 与 nn.LSTM(cuDNN) 的单次前向耗时对比，供报告引用。"""
+    import time
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    ids = torch.randint(2, vocab_size, (batch_size, seq_len), device=device)
+    mine = BiLSTMClassifier(vocab_size, embed_dim, hidden_size, num_layers=1,
+                            bidirectional=True, pooling="mean", num_classes=5,
+                            dropout=0.0).to(device).eval()
+    ref_embedding = nn.Embedding(vocab_size, embed_dim).to(device)
+    ref_lstm = nn.LSTM(embed_dim, hidden_size, num_layers=1,
+                       batch_first=True, bidirectional=True).to(device).eval()
+
+    def timeit(fn):
+        with torch.no_grad():
+            fn()  # 预热
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            t0 = time.perf_counter()
+            for _ in range(iters):
+                fn()
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            return (time.perf_counter() - t0) / iters * 1000
+
+    manual_ms = timeit(lambda: mine(ids))
+    nn_ms = timeit(lambda: ref_lstm(ref_embedding(ids)))
+    return {"manual_ms": manual_ms, "nn_ms": nn_ms, "ratio": manual_ms / nn_ms}

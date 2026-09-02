@@ -68,7 +68,14 @@ class BatchIterator:
         order = self.rng.permutation(n) if self.shuffle else np.arange(n)
         for start in range(0, n, self.batch_size):
             index = order[start:start + self.batch_size]
+            xb = self.ids[index]
+            # 工程优化：批内动态长度。截去批内全为 PAD 的尾部时间步，
+            # LSTM/卷积只需处理批内最长序列（下限 12，保证短于最大卷积核的
+            # 极短批不致维度不足）。短语平均仅约 7 词，相对固定 48 步可省
+            # 大量无效时间步。LSTM 第 t 步输出只依赖前 t 步，截断不影响
+            # 有效位置的表示。
+            max_len = max(int((xb != PAD_ID).sum(axis=1).max()), 12)
             yield (
-                torch.from_numpy(self.ids[index]),
+                torch.from_numpy(np.ascontiguousarray(xb[:, :max_len])),
                 torch.from_numpy(self.labels[index]),
             )

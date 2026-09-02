@@ -26,7 +26,7 @@ from common.preprocess import prepare_dataframe
 from common.split import ensure_split
 from common.utils import ensure_dirs, load_data, set_seed
 from evaluation.evaluate import evaluate_predictions
-from models.deep_learning.bilstm import BiLSTMClassifier, verify_manual_bilstm
+from models.deep_learning.bilstm import BiLSTMClassifier, benchmark_vs_nn_lstm, verify_manual_bilstm
 from models.deep_learning.layers import run_component_checks
 
 
@@ -63,6 +63,9 @@ def main() -> None:
 
     run_component_checks()
     print(f"[组件验证] 手写BiLSTM vs nn.LSTM   max|diff| = {verify_manual_bilstm():.2e}")
+    bench = benchmark_vs_nn_lstm()
+    print(f"[性能对比] 单批前向耗时(64×48): 手写BiLSTM {bench['manual_ms']:.2f} ms  "
+          f"vs nn.LSTM(cuDNN) {bench['nn_ms']:.2f} ms  ({bench['ratio']:.1f}x)")
 
     # -------------------------------------------------- 数据读取与统一划分
     train_df, test_df = load_data()
