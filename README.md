@@ -57,7 +57,7 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
 
 | 实验组 | 做什么 | 目的 | 状态 |
 |---|---|---|---|
-| base（主实验） | TextCNN / BiLSTM / BERT 各跑一次 | 三模型正式成绩与完整指标 → 报告主对比表 | ✅ 0.6750 / 0.6765 / 0.7044 |
+| base（主实验） | TextCNN / BiLSTM / BERT 各跑一次 | 三模型正式成绩与完整指标 → 报告主对比表 | ✅ 0.6750 / 0.6753 / 0.7044 |
 | nn_compare（库对照） | BiLSTM `--impl nn`，跑一次 | 证明手写实现正确（精度接近）并量化与 cuDNN 的速度差（约 19 倍） | ✅ 0.6730 |
 | grouped（防泄漏对照） | TextCNN / BiLSTM 以 `--mode grouped` 重跑 | 量化两种划分的指标落差（泄漏效应） | ✅ 0.6099 / 0.6263 |
 | ablation（消融） | 每个模型改一个参数重跑，共 5 个约 30 分钟 | **课设硬性要求：参数与配置对比** | ⬜ 待启动 |
@@ -259,7 +259,7 @@ python src/evaluation/evaluate.py --pred_path results/dl/textcnn/base/pred_val.c
 - ✅ 公共基础设施：统一划分、实验契约、汇总工具、评估脚本
 - ✅ 深度学习三模型实现（手写为主）+ 数值一致性验证
 - ✅ BiLSTM 效率优化（3.4×）与手写 vs 库对照实验
-- ✅ base 实验：TextCNN 0.6750 / BiLSTM 0.6765 / BERT 0.7044（stratified 验证集，多数类基线 0.512）
+- ✅ base 实验：TextCNN 0.6750 / BiLSTM 0.6753 / BERT 0.7044（stratified 验证集，多数类基线 0.512）
 - ✅ grouped 对照：TextCNN 0.6099 / BiLSTM 0.6263（BERT 版已裁撤）
 - ⬜ 消融实验（5 个，约 30 分钟，编排脚本就绪）
 - ⬜ 课程报告；可选：Kaggle 提交、句子上下文融合

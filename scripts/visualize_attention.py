@@ -36,15 +36,34 @@ apply_plot_style()
 LABEL_NAMES = {0: "负面", 1: "偏负面", 2: "中性", 3: "偏正面", 4: "正面"}
 
 
-def pick_samples(val_df, num_per_label: int = 2, min_len: int = 5, max_len: int = 16):
-    """每个类别抽几条长度适中的短语，注意力图上才有可读的信息。"""
+def pick_samples(model, vocab, max_len: int, val_df, num_per_label: int = 2,
+                 min_len: int = 5, max_tokens: int = 16, max_tries: int = 80):
+    """每个类别挑若干"分类正确且不含单字符噪声词"的样本。
+
+    可解释性可视化的标准做法：图的目的是展示模型关注什么，因此只在
+    分类正确的样本中选取；单字符 token（如缩写拆分出的 "t"）会让图不可读。
+    """
     samples = []
     for label in sorted(val_df["Sentiment"].unique()):
         pool = val_df[(val_df["Sentiment"] == label)]
         lengths = pool["Phrase"].str.split().str.len()
-        pool = pool[(lengths >= min_len) & (lengths <= max_len)]
-        samples.append(pool.head(num_per_label))
-    return pd.concat(samples, ignore_index=True)
+        pool = pool[(lengths >= min_len) & (lengths <= max_tokens)]
+        kept = 0
+        for _, row in pool.iterrows():
+            if kept >= num_per_label or kept >= max_tries:
+                break
+            tokens = str(row["Phrase"]).split()
+            if any(len(t) == 1 for t in tokens):
+                continue
+            ids = vocab.encode([row["Phrase"]], max_len)
+            valid_len = int((ids[0] != 0).sum())
+            with torch.no_grad():
+                logits = model(torch.from_numpy(ids[:, :valid_len]))
+            if int(logits.argmax(dim=1).item()) != label:
+                continue
+            samples.append(row)
+            kept += 1
+    return pd.DataFrame(samples).reset_index(drop=True)
 
 
 def main() -> None:
@@ -88,8 +107,12 @@ def main() -> None:
     model.load_state_dict(torch.load(weights_path, map_location="cpu"))
     model.eval()
 
-    samples = pick_samples(val_part, num_per_label=args.num_per_label)
     max_len = params.get("max_len", 48)
+    samples = pick_samples(model, vocab, max_len, val_part,
+                           num_per_label=args.num_per_label)
+    if samples.empty:
+        print("[未找到] 没有满足条件的分类正确样本，请放宽长度限制。")
+        sys.exit(1)
 
     ncols = 4
     nrows = (len(samples) + ncols - 1) // ncols
@@ -118,8 +141,8 @@ def main() -> None:
     for j in range(len(samples), nrows * ncols):
         axes[j // ncols][j % ncols].axis("off")
 
-    fig.suptitle(f"BiLSTM 注意力权重可视化（{args.exp}，样本 {len(samples)} 条，"
-                 f"预测正确 {correct} 条；横条越长表示该词对分类的贡献越大）", fontsize=11)
+    fig.suptitle(f"BiLSTM 注意力权重可视化（{args.exp}，分类正确样本 {len(samples)} 条；"
+                 f"横条越长表示该词对分类的贡献越大）", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     out_path = RESULTS_DIR / f"attention_heatmap_{args.exp}.png"
     fig.savefig(out_path, dpi=150)
