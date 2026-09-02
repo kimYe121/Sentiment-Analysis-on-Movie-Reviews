@@ -95,7 +95,7 @@ def batch_predict(model, ids, mask, device, batch_size: int, use_amp: bool,
             with torch.amp.autocast("cuda", enabled=use_amp):
                 logits = model(input_ids=xb, attention_mask=mb).logits
                 if labels is not None:
-                    yb = torch.from_numpy(labels[sl]).to(device)
+                    yb = torch.from_numpy(np.array(labels[sl])).to(device)
                     total_loss += F.cross_entropy(logits.float(), yb).item() * len(xb)
                     seen += len(xb)
             preds.append(logits.float().argmax(dim=1).cpu().numpy())
