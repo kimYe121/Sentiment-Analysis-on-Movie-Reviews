@@ -46,6 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pooling", type=str, default="attention",
                         choices=("attention", "mean", "last"))
     parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Adam 权重衰减，消融用")
+    parser.add_argument("--impl", type=str, default="manual", choices=("manual", "nn"),
+                        help="循环核心实现：manual=手写（正式结果），nn=nn.LSTM（性能对照实验）")
     parser.add_argument("--min_freq", type=int, default=2)
     parser.add_argument("--max_len", type=int, default=48)
     parser.add_argument("--max_samples", type=int, default=0, help="调试用：>0 时只抽取训练子集")
@@ -91,11 +94,13 @@ def main() -> None:
     logger.set_data_info(len(train_part), len(val_part), len(test_df))
 
     # -------------------------------------------------- 训练
+    print(f"[实现] 循环核心 = {args.impl}" + ("（性能对照实验，正式结果请用 manual）" if args.impl == "nn" else ""))
     model = BiLSTMClassifier(vocab_size=len(vocab), embed_dim=args.embed_dim,
                              hidden_size=args.hidden_size, num_layers=args.num_layers,
                              bidirectional=bool(args.bidirectional), pooling=args.pooling,
-                             dropout=args.dropout).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+                             dropout=args.dropout, recurrent_impl=args.impl).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                 weight_decay=args.weight_decay)
     train_iter = BatchIterator(x_train, y_train, args.batch_size, shuffle=True, seed=args.seed)
 
     t0 = time.time()

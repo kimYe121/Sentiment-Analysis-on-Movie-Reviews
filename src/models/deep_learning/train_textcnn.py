@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_filters", type=int, default=128)
     parser.add_argument("--kernel_sizes", type=str, default="3,4,5", help="逗号分隔的卷积核宽度")
     parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Adam 权重衰减，消融用")
     parser.add_argument("--min_freq", type=int, default=2, help="词表最小词频")
     parser.add_argument("--max_len", type=int, default=48)
     parser.add_argument("--max_samples", type=int, default=0, help="调试用：>0 时只抽取训练子集")
@@ -88,7 +89,8 @@ def main() -> None:
     model = TextCNN(vocab_size=len(vocab), embed_dim=args.embed_dim,
                     kernel_sizes=tuple(int(k) for k in args.kernel_sizes.split(",")),
                     num_filters=args.num_filters, dropout=args.dropout).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                 weight_decay=args.weight_decay)
     train_iter = BatchIterator(x_train, y_train, args.batch_size, shuffle=True, seed=args.seed)
 
     t0 = time.time()

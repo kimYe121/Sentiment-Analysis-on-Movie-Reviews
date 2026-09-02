@@ -125,6 +125,28 @@ class ManualAttention(nn.Module):
         return (alpha.unsqueeze(-1) * states).sum(dim=1)          # (B, H)
 
 
+class NnLSTMLayer(nn.Module):
+    """nn.LSTM 封装：与 ManualBiLSTM 完全相同的前向接口。
+
+    仅用于性能对照实验（--impl nn）：同一数据划分、同一池化与分类头，
+    只把循环核心换成库实现，从而把速度差异严格隔离在 LSTM 计算本身。
+    """
+
+    def __init__(self, input_size: int, hidden_size: int, bidirectional: bool = True) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.bidirectional = bidirectional
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=1,
+                            batch_first=True, bidirectional=bidirectional)
+
+    def output_size(self) -> int:
+        return self.hidden_size * (2 if self.bidirectional else 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, _ = self.lstm(x)
+        return out
+
+
 class BiLSTMClassifier(nn.Module):
     """BiLSTM 分类器：嵌入 -> (多层)BiLSTM -> 池化(last/mean/attention) -> 分类。"""
 
@@ -139,20 +161,25 @@ class BiLSTMClassifier(nn.Module):
         num_classes: int = 5,
         dropout: float = 0.5,
         padding_idx: int = 0,
+        recurrent_impl: str = "manual",
     ) -> None:
         super().__init__()
         if pooling not in ("last", "mean", "attention"):
             raise ValueError(f"不支持的池化方式: {pooling}")
+        if recurrent_impl not in ("manual", "nn"):
+            raise ValueError(f"不支持的循环核心实现: {recurrent_impl}")
 
         self.padding_idx = padding_idx
         self.pooling = pooling
         self.bidirectional = bidirectional
+        self.recurrent_impl = recurrent_impl
 
         self.embedding = ManualEmbedding(vocab_size, embed_dim, padding_idx)
-        layers: list[ManualBiLSTM] = []
+        layer_cls = ManualBiLSTM if recurrent_impl == "manual" else NnLSTMLayer
+        layers = []
         in_size = embed_dim
         for _ in range(num_layers):
-            layer = ManualBiLSTM(in_size, hidden_size, bidirectional)
+            layer = layer_cls(in_size, hidden_size, bidirectional)
             layers.append(layer)
             in_size = layer.output_size()
         self.bilstm_layers = nn.ModuleList(layers)
