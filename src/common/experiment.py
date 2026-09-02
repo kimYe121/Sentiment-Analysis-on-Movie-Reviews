@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+import torch
 
 from common.utils import RESULTS_DIR, ensure_dirs
 
@@ -105,6 +106,10 @@ class ExperimentLogger:
         pd.DataFrame({"PhraseId": phrase_ids, "Sentiment": y_pred}).to_csv(
             self.exp_dir / "submission.csv", index=False
         )
+
+    def save_model(self, state_dict) -> None:
+        """保存最优模型权重，用于推理复现与可解释性分析（如注意力可视化）。"""
+        torch.save(state_dict, self.exp_dir / "model.pt")
 
     def print_summary(self, metrics: dict) -> None:
         print(f"\n[实验目录] {self.exp_dir}")

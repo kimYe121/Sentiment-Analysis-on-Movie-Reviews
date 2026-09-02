@@ -109,6 +109,7 @@ def main() -> None:
                                        grad_clip=args.grad_clip, patience=args.patience)
     train_seconds = round(time.time() - t0, 1)
     logger.save_history(history)
+    logger.save_model(model.state_dict())
 
     # -------------------------------------------------- 评估与落盘
     _, val_pred = predict(model, x_val, device)

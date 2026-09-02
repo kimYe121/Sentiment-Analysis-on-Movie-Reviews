@@ -177,6 +177,32 @@ class ResultAggregator:
         plt.close(fig)
         print(f"[输出] {out_path}")
 
+    # --------------------------------------------------------- 消融对比图
+    @staticmethod
+    def plot_ablation_bars(df: pd.DataFrame, out_path: Path) -> None:
+        """对实验数 >1 的模型，画出其全部实验的 macro F1，base 作参考线。"""
+        model_names = [m for m, g in df.groupby("model") if len(g) > 1]
+        if not model_names:
+            return
+        fig, axes = plt.subplots(1, len(model_names),
+                                 figsize=(5.5 * len(model_names), 4.6), squeeze=False)
+        for ax, model in zip(axes[0], model_names):
+            sub = df[df["model"] == model].sort_values("exp")
+            colors = ["#4C72B0" if e == "base" else "#DD8452" for e in sub["exp"]]
+            ax.bar(sub["exp"], sub["macro_f1"], color=colors)
+            base_row = sub[sub["exp"] == "base"]
+            if not base_row.empty:
+                ax.axhline(base_row["macro_f1"].iloc[0], ls="--", color="gray", lw=1)
+            ax.set_title(model, fontsize=11)
+            ax.set_ylabel("Macro F1")
+            ax.set_ylim(0, 0.85)
+            ax.tick_params(axis="x", rotation=35)
+            ax.grid(axis="y", alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+        print(f"[输出] {out_path}")
+
     # ------------------------------------------------------------- 总入口
     def run(self, out_dir: str | Path | None = None) -> pd.DataFrame:
         out_dir = Path(out_dir) if out_dir is not None else self.root
@@ -192,6 +218,7 @@ class ResultAggregator:
         self.plot_metric_bars(df, out_dir / "comparison_metrics.png")
         self.plot_curves(df, out_dir / "training_curves.png")
         self.plot_confusion_grid(df, out_dir / "confusion_matrices.png")
+        self.plot_ablation_bars(df, out_dir / "ablation_comparison.png")
 
         print("\n[汇总预览]")
         preview = df[["family", "model", "exp", "split_mode", "accuracy", "macro_f1", "weighted_f1"]]

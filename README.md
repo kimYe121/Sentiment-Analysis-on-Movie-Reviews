@@ -137,6 +137,19 @@ SentimentAnalysisOnMovieReviews/
 
 **原则：训练脚本只负责训练与落盘；汇总工具只读文件、不参与训练。**
 
+### 可视化产物清单（报告配图与支撑章节的对应关系）
+
+| 可视化 | 生成方式 | 支撑报告章节 |
+|---|---|---|
+| `results/eda_label_distribution.png` | `scripts/visualize_eda.py` | 数据分析：类别不均衡（中性 51%） |
+| `results/eda_length_distribution.png` | `scripts/visualize_eda.py` | 数据分析：句长分布 → max_len 截断决策 |
+| `results/comparison_metrics.png` | `aggregator.py` | 模型对比：accuracy / macro F1 |
+| `results/training_curves.png` | `aggregator.py` | 训练过程与过拟合分析 |
+| `results/confusion_matrices.png` | `aggregator.py` | 误差分析：相邻类别混淆 |
+| `results/ablation_comparison.png` | `aggregator.py` | 消融分析：各参数对 macro F1 的影响 |
+| `results/attention_heatmap_*.png` | `scripts/visualize_attention.py` | 模型设计亮点：注意力权重的可解释性 |
+| `results/comparison.csv` | `aggregator.py` | 全部实验的数值汇总表 |
+
 ## 七、快速开始
 
 ### 1. 环境配置
