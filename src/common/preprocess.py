@@ -16,17 +16,20 @@ def clean_text(text: str) -> str:
     return text
 
 
-def build_sentence_context(train_df: pd.DataFrame) -> pd.DataFrame:
-    """根据 SentenceId 聚合句子级上下文信息。"""
-    sentence_info = (
-        train_df.groupby("SentenceId", as_index=False)
-        .agg(
-            sentence_text=("Phrase", lambda x: " ".join(str(v) for v in x if str(v).strip())),
-            sentence_length=("Phrase", "count"),
-        )
-    )
-    sentence_info.rename(columns={"sentence_text": "sentence_context"}, inplace=True)
-    return train_df.merge(sentence_info, on="SentenceId", how="left")
+def build_sentence_context(df: pd.DataFrame) -> pd.DataFrame:
+    """以每句最长的短语重建完整句子，写入 ``sentence_context`` 列。
+
+    SST 语料中完整句子本身就是其中一条短语，因此"每句最长短语"即原句的
+    最佳重建：干净、保序、无重复。此前按短语拼接的构建方式会把同句全部
+    短语（约 18 条、含大量重叠子串）串成 ~7 倍于原句长度的乱序块，噪声
+    淹没信号，是上下文融合首次实验无效的主要原因。
+    """
+    out = df.copy()
+    lengths = out["Phrase"].astype(str).str.split().str.len()
+    idx = lengths.groupby(out["SentenceId"]).idxmax()
+    context = out.loc[idx, ["SentenceId", "Phrase"]].set_index("SentenceId")["Phrase"]
+    out["sentence_context"] = out["SentenceId"].map(context)
+    return out
 
 
 def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:

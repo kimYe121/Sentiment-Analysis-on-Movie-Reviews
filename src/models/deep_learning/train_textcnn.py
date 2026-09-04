@@ -25,7 +25,7 @@ from common.experiment import ExperimentLogger
 from common.preprocess import prepare_dataframe
 from common.split import ensure_split
 from common.utils import ensure_dirs, load_data, set_seed
-from evaluation.evaluate import evaluate_predictions
+from common.metrics import evaluate_predictions
 from models.deep_learning.layers import run_component_checks
 from models.deep_learning.textcnn import TextCNN, verify_manual_conv1d
 
@@ -36,18 +36,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", type=str, default="stratified", choices=("stratified", "grouped"))
     parser.add_argument("--val_ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--epochs", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--embed_dim", type=int, default=128)
     parser.add_argument("--num_filters", type=int, default=128)
     parser.add_argument("--kernel_sizes", type=str, default="3,4,5", help="逗号分隔的卷积核宽度")
-    parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--dropout", type=float, default=0.7)
+    parser.add_argument("--weight_decay", type=float, default=0.01, help="AdamW 解耦权重衰减")
+    parser.add_argument("--label_smoothing", type=float, default=0.1, help="标签平滑系数")
     parser.add_argument("--min_freq", type=int, default=2, help="词表最小词频")
     parser.add_argument("--max_len", type=int, default=48)
     parser.add_argument("--max_samples", type=int, default=0, help="调试用：>0 时只抽取训练子集")
     parser.add_argument("--grad_clip", type=float, default=5.0)
-    parser.add_argument("--patience", type=int, default=3, help="早停轮数")
+    parser.add_argument("--patience", type=int, default=6, help="早停轮数")
     return parser.parse_args()
 
 
@@ -88,15 +90,20 @@ def main() -> None:
     model = TextCNN(vocab_size=len(vocab), embed_dim=args.embed_dim,
                     kernel_sizes=tuple(int(k) for k in args.kernel_sizes.split(",")),
                     num_filters=args.num_filters, dropout=args.dropout).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    # AdamW：权重衰减与梯度自适应尺度解耦，正则化作用更可控
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+                                  weight_decay=args.weight_decay)
     train_iter = BatchIterator(x_train, y_train, args.batch_size, shuffle=True, seed=args.seed)
 
     t0 = time.time()
     history, best_epoch = run_training(model, optimizer, train_iter, x_val, y_val,
                                        device, epochs=args.epochs,
-                                       grad_clip=args.grad_clip, patience=args.patience)
+                                       grad_clip=args.grad_clip, patience=args.patience,
+                                       label_smoothing=args.label_smoothing,
+                                       lr_schedule="cosine")
     train_seconds = round(time.time() - t0, 1)
     logger.save_history(history)
+    logger.save_model(model.state_dict())
 
     # -------------------------------------------------- 评估与落盘
     _, val_pred = predict(model, x_val, device)

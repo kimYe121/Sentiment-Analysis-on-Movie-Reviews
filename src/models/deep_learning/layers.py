@@ -61,11 +61,20 @@ class ManualDropout(nn.Module):
         return x * mask / keep
 
 
-def manual_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """手写 softmax 交叉熵（数值稳定版），等价于 F.cross_entropy。"""
+def manual_cross_entropy(logits: torch.Tensor, targets: torch.Tensor,
+                         label_smoothing: float = 0.0) -> torch.Tensor:
+    """手写 softmax 交叉熵（数值稳定版），支持标签平滑，等价于
+    F.cross_entropy(..., label_smoothing=...)。
+
+    标签平滑把硬目标 y 换成 (1-eps)*onehot + eps/K 的软目标，
+    抑制模型对训练集的过度自信，是缓解过拟合的正则化手段。
+    """
     shifted = logits - logits.max(dim=-1, keepdim=True).values
     log_probs = shifted - shifted.exp().sum(dim=-1, keepdim=True).log()
     nll = -log_probs.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+    if label_smoothing > 0.0:
+        smooth = -log_probs.mean(dim=1)
+        nll = (1.0 - label_smoothing) * nll + label_smoothing * smooth
     return nll.mean()
 
 
@@ -82,10 +91,14 @@ def verify_manual_linear(tol: float = 1e-5) -> float:
 
 
 def verify_manual_cross_entropy(tol: float = 1e-5) -> float:
-    """验证手写交叉熵与 F.cross_entropy 数值一致。"""
+    """验证手写交叉熵（含标签平滑）与 F.cross_entropy 数值一致。"""
     logits = torch.randn(32, 5)
     targets = torch.randint(0, 5, (32,))
-    return (manual_cross_entropy(logits, targets) - F.cross_entropy(logits, targets)).abs().max().item()
+    diff_plain = (manual_cross_entropy(logits, targets)
+                  - F.cross_entropy(logits, targets)).abs().max().item()
+    diff_smooth = (manual_cross_entropy(logits, targets, label_smoothing=0.1)
+                   - F.cross_entropy(logits, targets, label_smoothing=0.1)).abs().max().item()
+    return max(diff_plain, diff_smooth)
 
 
 def run_component_checks() -> None:

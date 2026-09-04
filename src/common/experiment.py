@@ -9,7 +9,7 @@
 - ``label_val.csv``    验证集真实标签，列: PhraseId, Sentiment
 - ``submission.csv``   Kaggle 测试集提交文件，列: PhraseId, Sentiment
 
-``src/evaluation/aggregator.py`` 依据该契约自动扫描并汇总所有实验，
+``scripts/make_figures.py`` 依据该契约自动扫描并汇总所有实验，
 训练脚本因此不需要关心画图与对比逻辑。
 """
 
@@ -20,7 +20,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import torch
 
 from common.utils import RESULTS_DIR, ensure_dirs
 
@@ -105,6 +107,16 @@ class ExperimentLogger:
         pd.DataFrame({"PhraseId": phrase_ids, "Sentiment": y_pred}).to_csv(
             self.exp_dir / "submission.csv", index=False
         )
+
+    def save_model(self, state_dict) -> None:
+        """保存最优模型权重，用于推理复现与可解释性分析（如注意力可视化）。"""
+        torch.save(state_dict, self.exp_dir / "model.pt")
+
+    def save_probs(self, probs_val, probs_test=None) -> None:
+        """保存验证集/测试集的 softmax 概率矩阵 (N, 5)，供模型集成使用。"""
+        np.save(self.exp_dir / "probs_val.npy", np.asarray(probs_val, dtype=np.float32))
+        if probs_test is not None:
+            np.save(self.exp_dir / "probs_test.npy", np.asarray(probs_test, dtype=np.float32))
 
     def print_summary(self, metrics: dict) -> None:
         print(f"\n[实验目录] {self.exp_dir}")
