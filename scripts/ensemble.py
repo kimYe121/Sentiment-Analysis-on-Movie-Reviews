@@ -7,7 +7,7 @@ Foundations and Algorithms[M]. Boca Raton: CRC Press, 2012.）。
 用法：
     python scripts/ensemble.py                                    # 默认：bert/base + bilstm/base + textcnn/base
     python scripts/ensemble.py dl/bert/ctx dl/bilstm/ctx dl/textcnn/base
-产物：results/dl/ensemble/<exp_name>/（与训练实验同契约，自动进 aggregator）
+产物：results/dl/ensemble/<exp_name>/（与训练实验同契约，自动进汇总表）
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from common.experiment import ExperimentLogger
 from common.utils import RESULTS_DIR
-from evaluation.evaluate import evaluate_predictions
+from common.metrics import evaluate_predictions
 
 
 def load_experiment(results_dir: Path, spec: str) -> dict:

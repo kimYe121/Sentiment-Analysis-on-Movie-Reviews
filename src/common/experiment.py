@@ -9,7 +9,7 @@
 - ``label_val.csv``    验证集真实标签，列: PhraseId, Sentiment
 - ``submission.csv``   Kaggle 测试集提交文件，列: PhraseId, Sentiment
 
-``src/evaluation/aggregator.py`` 依据该契约自动扫描并汇总所有实验，
+``scripts/make_figures.py`` 依据该契约自动扫描并汇总所有实验，
 训练脚本因此不需要关心画图与对比逻辑。
 """
 

@@ -21,7 +21,7 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
 编排脚本 scripts/run_experiments.py ── 按 GROUPS 清单批量、顺序调用训练脚本
                         │
                         ▼
-        aggregator.py 汇总全部实验 ──▶ comparison.csv + 对比柱状图/训练曲线/混淆矩阵
+        make_figures.py 汇总全部实验 ──▶ comparison.csv + 对比柱状图/曲线/混淆矩阵/误差结构
                         │                                    │
                         ▼                                    ▼
         submission.csv ──▶ Kaggle 官方分数          报告直接引用的表格与图
@@ -105,11 +105,9 @@ SentimentAnalysisOnMovieReviews/
     │   ├── preprocess.py         # 文本清洗与句子上下文特征
     │   ├── split.py              # 统一训练/验证划分（stratified / grouped）
     │   ├── experiment.py         # 实验产物落盘契约（ExperimentLogger）
+    │   ├── metrics.py            # 统一评估指标
     │   ├── dl_data.py            # 手写词表、编码、批迭代器（含批内动态长度）
     │   └── dl_train.py           # 手写训练循环、梯度裁剪、早停
-    ├── evaluation/
-    │   ├── evaluate.py           # 统一指标计算与混淆矩阵图
-    │   └── aggregator.py         # 汇总所有实验，生成对比表和对比图
     └── models/
         ├── classical/            # 传统机器学习（经典 ML 组负责）
         │   ├── train_logistic_regression.py   # 参考实现/模板
@@ -123,7 +121,7 @@ SentimentAnalysisOnMovieReviews/
 
 ## 六、实验产物契约（所有训练脚本必须遵守）
 
-每个实验在 `results/<family>/<model>/<exp_name>/` 下产出固定文件，`aggregator.py` 据此自动汇总：
+每个实验在 `results/<family>/<model>/<exp_name>/` 下产出固定文件，`scripts/make_figures.py` 据此自动汇总：
 
 | 文件 | 内容 |
 |---|---|
@@ -133,7 +131,7 @@ SentimentAnalysisOnMovieReviews/
 | `pred_val.csv` / `label_val.csv` | 验证集预测与真实标签 |
 | `submission.csv` | Kaggle 测试集提交文件 |
 
-汇总产物（`aggregator.py` 自动生成）：`results/comparison.csv`、`comparison_metrics.png`（指标柱状图）、`training_curves.png`（训练曲线）、`confusion_matrices.png`（混淆矩阵拼图）。
+汇总产物（`scripts/make_figures.py` 一条命令生成）：`results/comparison.csv` 与全部报告图（主对比、训练曲线、各类别 F1、误差结构、混淆矩阵、注意力热力图）。
 
 **原则：训练脚本只负责训练与落盘；汇总工具只读文件、不参与训练。**
 
@@ -148,7 +146,7 @@ SentimentAnalysisOnMovieReviews/
 | `results/per_class_f1.png` | 类别不均衡：各类别 F1 对比（两端类别短板） |
 | `results/error_structure.png` | 误差分析：错误集中于相邻情感等级（序数性质） |
 | `results/attention_heatmap_*.png` | 模型设计亮点：注意力权重的可解释性 |
-| `results/comparison.csv` | 全部实验的数值汇总表（`src/evaluation/aggregator.py` 生成） |
+| `results/comparison.csv` | 全部实验的数值汇总表（`make_figures.py` 生成） |
 
 ## 七、快速开始
 
@@ -212,18 +210,6 @@ $env:HF_ENDPOINT="https://hf-mirror.com"; python src/models/deep_learning/train_
 ```bash
 python src/models/classical/train_logistic_regression.py --exp_name base
 # 其余经典模型请参照 train_logistic_regression.py 模板实现
-```
-
-### 5. 汇总与可视化
-
-```bash
-python src/evaluation/aggregator.py
-```
-
-### 6. 单个实验的评估与混淆矩阵
-
-```bash
-python src/evaluation/evaluate.py --pred_path results/dl/textcnn/base/pred_val.csv --label_path results/dl/textcnn/base/label_val.csv --output_dir results/dl/textcnn/base
 ```
 
 ## 八、模型路线与手写实现说明

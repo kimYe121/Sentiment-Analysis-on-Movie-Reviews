@@ -34,7 +34,7 @@ from common.dl_train import clip_grad_norm
 from common.experiment import ExperimentLogger
 from common.split import ensure_split
 from common.utils import ensure_dirs, load_data, set_seed
-from evaluation.evaluate import evaluate_predictions
+from common.metrics import evaluate_predictions
 
 
 def parse_args() -> argparse.Namespace:

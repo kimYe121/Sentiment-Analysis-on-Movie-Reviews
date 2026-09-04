@@ -25,7 +25,7 @@ from common.experiment import ExperimentLogger
 from common.preprocess import prepare_dataframe
 from common.split import ensure_split
 from common.utils import ensure_dirs, load_data, set_seed
-from evaluation.evaluate import evaluate_predictions
+from common.metrics import evaluate_predictions
 from models.deep_learning.layers import run_component_checks
 from models.deep_learning.textcnn import TextCNN, verify_manual_conv1d
 

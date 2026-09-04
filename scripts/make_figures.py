@@ -1,24 +1,27 @@
-"""报告图表统一出口：一条命令生成全部报告配图。
+"""报告图表统一出口：一条命令生成全部报告配图与汇总表。
 
 包含：
 1. eda_label_distribution      标签分布（类别不均衡证据）
 2. eda_length_distribution     短语长度分布（max_len 决策依据）
-3. model_comparison            主对比柱状图（accuracy / macro F1）
-4. training_curves             训练曲线（loss 与 acc 双面板）
-5. per_class_f1                各类别 F1 分组柱状图（少数类短板可视化）
-6. error_structure             误差结构分析（混淆占比：邻近 vs 远距错误）
-7. attention_heatmap           BiLSTM 注意力可视化（需 model.pt）
+3. comparison.csv              全部实验的数值汇总表
+4. model_comparison            主对比柱状图（accuracy / macro F1 + 多数类基线）
+5. training_curves             训练曲线（loss 与 acc 双面板）
+6. per_class_f1                各类别 F1 分组柱状图（少数类短板可视化）
+7. error_structure             误差结构分析（混淆占比：邻近 vs 远距错误）
+8. confusion_matrices          混淆矩阵拼图（原始计数）
+9. attention_heatmap           BiLSTM 注意力可视化（需 model.pt）
 
 用法：
     python scripts/make_figures.py                # 全部
     python scripts/make_figures.py --only eda     # 只生成 eda_* 图
-    python scripts/make_figures.py --only main    # 汇总类图（依赖实验结果）
+    python scripts/make_figures.py --only main    # 汇总类图与 comparison.csv
     python scripts/make_figures.py --only attention
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -27,14 +30,18 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from common.plot_style import apply_plot_style
 from common.utils import RESULTS_DIR, TRAIN_PATH
 
-apply_plot_style()
+# 中文字体统一样式（Windows 自带微软雅黑，其他系统自动回退）
+plt.rcParams["font.sans-serif"] = [
+    "Microsoft YaHei", "SimHei", "PingFang SC", "Noto Sans CJK SC", "DejaVu Sans",
+]
+plt.rcParams["axes.unicode_minus"] = False
 
 LABEL_NAMES = ["负面", "偏负面", "中性", "偏正面", "正面"]
 MODEL_COLORS = {"textcnn": "#4C72B0", "bilstm": "#55A868", "bert": "#C44E52",
@@ -88,7 +95,6 @@ def load_experiments(results_dir: Path) -> list[dict]:
         metrics_path = exp_dir / "metrics.json"
         if not metrics_path.exists():
             continue
-        import json
         config = json.loads(config_path.read_text(encoding="utf-8"))
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
         model, exp = exp_dir.parts[-2], exp_dir.parts[-1]
@@ -96,6 +102,60 @@ def load_experiments(results_dir: Path) -> list[dict]:
         experiments.append({"dir": exp_dir, "model": model, "exp": exp,
                             "display": display, "config": config, "metrics": metrics})
     return experiments
+
+
+def write_comparison_csv(experiments: list[dict], results_dir: Path) -> None:
+    """全部实验的数值汇总表（comparison.csv）。"""
+    rows = []
+    for e in experiments:
+        m, c = e["metrics"], e["config"]
+        rows.append({
+            "family": e["dir"].parts[-3], "model": e["model"], "exp": e["exp"],
+            "split_mode": c.get("split_mode"),
+            "accuracy": m.get("accuracy"), "macro_f1": m.get("macro_f1"),
+            "weighted_f1": m.get("weighted_f1"),
+            "best_epoch": m.get("best_epoch"), "train_seconds": m.get("train_seconds"),
+            "params": json.dumps(c.get("params", {}), ensure_ascii=False),
+        })
+    df = pd.DataFrame(rows).sort_values(["family", "model", "exp"]).reset_index(drop=True)
+    df.to_csv(results_dir / "comparison.csv", index=False, encoding="utf-8-sig")
+    print(f"[输出] comparison.csv（{len(df)} 个实验）")
+
+
+def plot_confusion_grid(experiments: list[dict], results_dir: Path,
+                        max_cols: int = 3) -> None:
+    """各实验混淆矩阵拼图（原始计数）。"""
+    show = [e for e in experiments
+            if (e["dir"] / "pred_val.csv").exists() and (e["dir"] / "label_val.csv").exists()]
+    if not show:
+        return
+    n = len(show)
+    ncols = min(max_cols, n)
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4.4 * nrows), squeeze=False)
+    for i, e in enumerate(show):
+        ax = axes[i // ncols][i % ncols]
+        y_true = pd.read_csv(e["dir"] / "label_val.csv")["Sentiment"]
+        y_pred = pd.read_csv(e["dir"] / "pred_val.csv")["pred"]
+        labels = sorted(y_true.unique())
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        ax.imshow(cm, cmap="Blues")
+        ax.set_xticks(range(len(labels)), labels)
+        ax.set_yticks(range(len(labels)), labels)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("True")
+        label = f"{e['model']}{'(+ctx)' if e['exp'] == 'ctx' else ''}"
+        ax.set_title(f"{label}/{e['exp']}", fontsize=10)
+        for r in range(cm.shape[0]):
+            for c in range(cm.shape[1]):
+                ax.text(c, r, str(cm[r, c]), ha="center", va="center", fontsize=7,
+                        color="white" if cm[r, c] > cm.max() / 2 else "black")
+    for j in range(n, nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+    fig.tight_layout()
+    fig.savefig(results_dir / "confusion_matrices.png", dpi=150)
+    plt.close(fig)
+    print("[输出] confusion_matrices.png")
 
 
 def pick(experiments: list[dict], model: str, exp: str) -> dict | None:
@@ -336,10 +396,12 @@ def main() -> None:
         plot_eda(RESULTS_DIR)
     if args.only in ("all", "main"):
         experiments = load_experiments(RESULTS_DIR)
+        write_comparison_csv(experiments, RESULTS_DIR)
         plot_model_comparison(experiments, RESULTS_DIR)
         plot_training_curves(experiments, RESULTS_DIR)
         plot_per_class_f1(experiments, RESULTS_DIR)
         plot_error_structure(experiments, RESULTS_DIR)
+        plot_confusion_grid(experiments, RESULTS_DIR)
     if args.only in ("all", "attention"):
         plot_attention(RESULTS_DIR, exp=args.attention_exp)
 

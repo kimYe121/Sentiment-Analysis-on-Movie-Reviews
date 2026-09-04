@@ -78,7 +78,7 @@ def run_group(group: str, dry_run: bool, force: bool) -> None:
         print(f"[完成] {exp_name}  耗时 {elapsed / 60:.1f} 分钟")
 
     print(f"\n===== 实验组 [{group}] 结束 =====")
-    print("汇总: python src/evaluation/aggregator.py")
+    print("汇总与出图: python scripts/make_figures.py")
 
 
 def main() -> None:
