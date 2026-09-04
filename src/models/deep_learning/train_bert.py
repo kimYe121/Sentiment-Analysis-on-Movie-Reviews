@@ -85,15 +85,16 @@ def encode_texts(tokenizer, texts, max_len: int, batch_size: int = 1024,
                  contexts=None):
     """批量 tokenize 成定长 id / mask 矩阵。
 
-    传入 ``contexts`` 时使用句对编码 (context, phrase)：上下文超长只截断
-    上下文（truncation="only_first"），完整保留短语。
+    传入 ``contexts`` 时使用句对编码 (context, phrase)：``longest_first``
+    逐 token 截断较长序列——上下文几乎总是更长，因此实际被截的几乎都是
+    上下文；该策略同时保证任何超长短语都不会放不进 max_length。
     """
     all_ids, all_mask = [], []
     for start in range(0, len(texts), batch_size):
         chunk = [str(t) for t in texts[start:start + batch_size]]
         if contexts is not None:
             cchunk = [str(t) for t in contexts[start:start + batch_size]]
-            encoded = tokenizer(cchunk, chunk, truncation="only_first",
+            encoded = tokenizer(cchunk, chunk, truncation="longest_first",
                                 max_length=max_len, padding="max_length",
                                 return_tensors="np")
         else:

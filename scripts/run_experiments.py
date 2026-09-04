@@ -46,7 +46,7 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
         # 上下文融合（自主改进）：短语 + 所在完整句子。针对短语脱离语境
         # 无法判断的问题，预期显著提升，是有提升效果的改进证据。
         ("dl", "bilstm", "ctx", "src/models/deep_learning/train_bilstm.py --exp_name ctx --use_context --max_len 32 --ctx_max_len 48 --epochs 12 --patience 4"),
-        ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 80 --batch_size 24 --epochs 2"),
+        ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 96 --batch_size 24 --epochs 2"),
     ],
 }
 
