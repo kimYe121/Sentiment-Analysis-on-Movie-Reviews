@@ -1,13 +1,16 @@
-"""手写训练循环：前向 / 反向 / 参数更新、梯度裁剪、逐轮验证、最优权重保留。
+"""
+手写训练循环：前向 / 反向 / 参数更新、梯度裁剪、余弦学习率衰减、
+逐轮验证、最优权重保留。
 
-TextCNN 与 BiLSTM 共用本模块；BERT 因使用混合精度与学习率调度，在其
-训练脚本中另有一份针对预训练模型的手写循环。这里同样不依赖任何高层
-训练框架（Lightning / Trainer 等）。
+TextCNN 与 BiLSTM 共用本模块；BERT 因使用混合精度与独立的学习率调度，
+在其训练脚本中另有一份针对预训练模型的手写循环。这里同样不依赖任何
+高层训练框架（Lightning / Trainer 等）。
 """
 
 from __future__ import annotations
 
 import copy
+import math
 import time
 
 import numpy as np
@@ -31,7 +34,8 @@ def clip_grad_norm(params, max_norm: float) -> torch.Tensor:
 
 
 def predict(model, ids: np.ndarray, device, batch_size: int = 512,
-            labels: np.ndarray | None = None) -> tuple[np.ndarray | None, np.ndarray]:
+            labels: np.ndarray | None = None,
+            label_smoothing: float = 0.0) -> tuple[np.ndarray | None, np.ndarray]:
     """对给定数据批量推理，返回 (平均交叉熵损失或 None, 预测类别)。"""
     model.eval()
     all_logits = []
@@ -48,7 +52,7 @@ def predict(model, ids: np.ndarray, device, batch_size: int = 512,
             if labels is not None:
                 # pandas 2.x 的 to_numpy() 可能返回只读数组，np.array 强制拷贝保证可写
                 yb = torch.from_numpy(np.array(labels[sl])).to(device)
-                total_loss += manual_cross_entropy(logits, yb).item() * len(batch)
+                total_loss += manual_cross_entropy(logits, yb, label_smoothing).item() * len(batch)
                 seen += len(batch)
     logits = torch.cat(all_logits)
     mean_loss = total_loss / seen if seen else None
@@ -56,23 +60,35 @@ def predict(model, ids: np.ndarray, device, batch_size: int = 512,
 
 
 def run_training(model, optimizer, train_iter, val_ids: np.ndarray, val_labels: np.ndarray,
-                 device, epochs: int, grad_clip: float = 0.0, patience: int = 3):
+                 device, epochs: int, grad_clip: float = 0.0, patience: int = 3,
+                 label_smoothing: float = 0.0, lr_schedule: str = "none"):
     """标准训练循环，按 val_acc 保留最优权重（原地加载回模型）。
+
+    - ``label_smoothing``：标签平滑系数，训练与验证损失使用同一口径；
+    - ``lr_schedule="cosine"``：手写余弦退火，第 e 轮学习率为
+      lr * 0.5 * (1 + cos(pi * (e-1) / (epochs-1)))，由初始值平滑衰减到 0，
+      后期小学习率减轻对训练集的过度拟合，让验证指标能在更多轮次上缓慢爬升。
 
     返回 (history DataFrame, best_epoch)。
     """
+    base_lrs = [g["lr"] for g in optimizer.param_groups]
     history: list[dict] = []
     best = {"val_acc": -1.0, "epoch": 0, "state": None}
     bad_epochs = 0
 
     for epoch in range(1, epochs + 1):
+        if lr_schedule == "cosine":
+            scale = 0.5 * (1.0 + math.cos(math.pi * (epoch - 1) / max(1, epochs - 1)))
+            for group, base_lr in zip(optimizer.param_groups, base_lrs):
+                group["lr"] = base_lr * scale
+
         model.train()
         t0 = time.time()
         total_loss, seen = 0.0, 0
         for xb, yb in train_iter:
             xb, yb = xb.to(device), yb.to(device)
             logits = model(xb)
-            loss = manual_cross_entropy(logits, yb)
+            loss = manual_cross_entropy(logits, yb, label_smoothing)
 
             optimizer.zero_grad()
             loss.backward()
@@ -83,20 +99,23 @@ def run_training(model, optimizer, train_iter, val_ids: np.ndarray, val_labels: 
             total_loss += loss.item() * len(xb)
             seen += len(xb)
 
-        val_loss, val_pred = predict(model, val_ids, device, labels=val_labels)
+        val_loss, val_pred = predict(model, val_ids, device, labels=val_labels,
+                                     label_smoothing=label_smoothing)
         val_acc = accuracy_score(val_labels, val_pred)
         val_macro_f1 = f1_score(val_labels, val_pred, average="macro")
         row = {
             "epoch": epoch,
+            "lr": optimizer.param_groups[0]["lr"],
             "train_loss": total_loss / max(seen, 1),
+            "val_loss": val_loss,
             "val_acc": val_acc,
             "val_macro_f1": val_macro_f1,
             "time_s": round(time.time() - t0, 1),
         }
         history.append(row)
-        print(f"[epoch {epoch:02d}] train_loss={row['train_loss']:.4f}  "
-              f"val_acc={val_acc:.4f}  val_macro_f1={val_macro_f1:.4f}  "
-              f"耗时={row['time_s']}s")
+        print(f"[epoch {epoch:02d}] lr={row['lr']:.2e}  train_loss={row['train_loss']:.4f}  "
+              f"val_loss={val_loss:.4f}  val_acc={val_acc:.4f}  "
+              f"val_macro_f1={val_macro_f1:.4f}  耗时={row['time_s']}s")
 
         if val_acc > best["val_acc"]:
             best = {

@@ -47,9 +47,9 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
     "ablation": [
         # 课设硬性要求：每个模型改一个参数做对比（与同模型 base 相比即得该参数的影响）。
         # 精简原则：每个模型只留最有解释力的参数，总计约 30 分钟 GPU 时间。
-        # ---- TextCNN：模型容量 与 正则化 ----
+        # ---- TextCNN：模型容量 与 正则化（base 默认 dropout=0.7，用 0.5 作低正则对照）----
         ("dl", "textcnn", "filters256", "src/models/deep_learning/train_textcnn.py --exp_name filters256 --num_filters 256"),
-        ("dl", "textcnn", "dropout07", "src/models/deep_learning/train_textcnn.py --exp_name dropout07 --dropout 0.7"),
+        ("dl", "textcnn", "dropout05", "src/models/deep_learning/train_textcnn.py --exp_name dropout05 --dropout 0.5"),
         # ---- BiLSTM：容量 与 池化方式（mean 对照 attention，支撑报告改进叙事）----
         ("dl", "bilstm", "hidden256", "src/models/deep_learning/train_bilstm.py --exp_name hidden256 --hidden_size 256"),
         ("dl", "bilstm", "pool_mean", "src/models/deep_learning/train_bilstm.py --exp_name pool_mean --pooling mean"),

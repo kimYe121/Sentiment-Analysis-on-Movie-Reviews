@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", type=str, default="stratified", choices=("stratified", "grouped"))
     parser.add_argument("--val_ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--epochs", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=15)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--embed_dim", type=int, default=128)
@@ -45,15 +45,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bidirectional", type=int, default=1, help="1=双向，0=单向")
     parser.add_argument("--pooling", type=str, default="attention",
                         choices=("attention", "mean", "last"))
-    parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--weight_decay", type=float, default=0.0, help="Adam 权重衰减，消融用")
+    parser.add_argument("--dropout", type=float, default=0.6)
+    parser.add_argument("--weight_decay", type=float, default=0.01, help="AdamW 解耦权重衰减")
+    parser.add_argument("--label_smoothing", type=float, default=0.1, help="标签平滑系数")
     parser.add_argument("--impl", type=str, default="manual", choices=("manual", "nn"),
                         help="循环核心实现：manual=手写（正式结果），nn=nn.LSTM（性能对照实验）")
     parser.add_argument("--min_freq", type=int, default=2)
     parser.add_argument("--max_len", type=int, default=48)
     parser.add_argument("--max_samples", type=int, default=0, help="调试用：>0 时只抽取训练子集")
     parser.add_argument("--grad_clip", type=float, default=5.0)
-    parser.add_argument("--patience", type=int, default=3)
+    parser.add_argument("--patience", type=int, default=5)
     return parser.parse_args()
 
 
@@ -99,14 +100,17 @@ def main() -> None:
                              hidden_size=args.hidden_size, num_layers=args.num_layers,
                              bidirectional=bool(args.bidirectional), pooling=args.pooling,
                              dropout=args.dropout, recurrent_impl=args.impl).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
-                                 weight_decay=args.weight_decay)
+    # AdamW：权重衰减与梯度自适应尺度解耦，正则化作用更可控
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+                                  weight_decay=args.weight_decay)
     train_iter = BatchIterator(x_train, y_train, args.batch_size, shuffle=True, seed=args.seed)
 
     t0 = time.time()
     history, best_epoch = run_training(model, optimizer, train_iter, x_val, y_val,
                                        device, epochs=args.epochs,
-                                       grad_clip=args.grad_clip, patience=args.patience)
+                                       grad_clip=args.grad_clip, patience=args.patience,
+                                       label_smoothing=args.label_smoothing,
+                                       lr_schedule="cosine")
     train_seconds = round(time.time() - t0, 1)
     logger.save_history(history)
     logger.save_model(model.state_dict())
