@@ -6,11 +6,18 @@
 封装。
 
 注意：BERT 输入直接使用原始 Phrase 文本，不做 clean_text 清洗（小写化
-与去标点会破坏预训练时的词分布）。
+与去标点会破坏预训练时的词分布）。国内下载预训练权重先设置镜像：
+    $env:HF_ENDPOINT = "https://hf-mirror.com"
 
-示例：
+运行方式（二选一）：
+    # 编排脚本批量跑（推荐，自动跳过已完成实验）
+    python scripts/run_experiments.py --group base        # 或 --group context
+    # 单独运行本脚本
     python src/models/deep_learning/train_bert.py --exp_name base
-    python src/models/deep_learning/train_bert.py --max_samples 5000 --epochs 1   # 冒烟
+
+其他参数示例：
+    python src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 96   # 句对融合
+    python src/models/deep_learning/train_bert.py --max_samples 5000 --epochs 1               # 冒烟
 """
 
 from __future__ import annotations

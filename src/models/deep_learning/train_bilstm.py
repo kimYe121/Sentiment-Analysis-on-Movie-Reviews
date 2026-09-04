@@ -1,8 +1,16 @@
-"""BiLSTM 训练脚本：LSTM 单元、双向展开与注意力池化均为手写实现。
+"""BiLSTM 训练脚本：LSTM 单元、双向展开与注意力池化均为手写实现
+（复现 Hochreiter & Schmidhuber 1997；注意力池化复现 Zhou et al., 2016）。
 
-示例：
+运行方式（二选一）：
+    # 编排脚本批量跑（推荐，自动跳过已完成实验）
+    python scripts/run_experiments.py --group base
+    # 单独运行本脚本
     python src/models/deep_learning/train_bilstm.py --exp_name base
-    python src/models/deep_learning/train_bilstm.py --pooling mean --exp_name pool_mean
+
+其他参数示例：
+    python src/models/deep_learning/train_bilstm.py --impl nn --exp_name base_nn         # 库实现对照
+    python src/models/deep_learning/train_bilstm.py --mode grouped --exp_name base_grouped
+    python src/models/deep_learning/train_bilstm.py --max_samples 20000 --epochs 2       # 快速调试
 """
 
 from __future__ import annotations

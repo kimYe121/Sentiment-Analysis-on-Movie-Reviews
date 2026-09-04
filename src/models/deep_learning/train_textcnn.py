@@ -1,8 +1,14 @@
-"""TextCNN 训练脚本：模型与数据管线均为手写实现。
+"""TextCNN 训练脚本：模型与数据管线均为手写实现（复现 Kim, 2014, EMNLP）。
 
-示例：
+运行方式（二选一）：
+    # 编排脚本批量跑（推荐，自动跳过已完成实验）
+    python scripts/run_experiments.py --group base
+    # 单独运行本脚本
     python src/models/deep_learning/train_textcnn.py --exp_name base
-    python src/models/deep_learning/train_textcnn.py --num_filters 64 --epochs 5 --exp_name filters64
+
+其他参数示例：
+    python src/models/deep_learning/train_textcnn.py --num_filters 64 --exp_name filters64
+    python src/models/deep_learning/train_textcnn.py --max_samples 20000 --epochs 2   # 快速调试
 """
 
 from __future__ import annotations
