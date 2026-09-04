@@ -13,7 +13,7 @@
 - base:       三个模型的正式结果（stratified 划分）
 - nn_compare: BiLSTM 手写实现 vs nn.LSTM 库实现，同一结构只换循环核心
 - grouped:    TextCNN / BiLSTM 在句级分组划分下的无泄漏指标
-- context:    上下文融合（自主改进）：短语 + 所在完整句子双输入
+- context:    上下文融合（自主改进）：BERT 句对输入 (完整句子, 短语)
 """
 
 from __future__ import annotations
@@ -43,9 +43,8 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
         ("dl", "bilstm", "base_grouped", "src/models/deep_learning/train_bilstm.py --exp_name base_grouped --mode grouped"),
     ],
     "context": [
-        # 上下文融合（自主改进）：短语 + 所在完整句子。针对短语脱离语境
-        # 无法判断的问题，预期显著提升，是有提升效果的改进证据。
-        ("dl", "bilstm", "ctx", "src/models/deep_learning/train_bilstm.py --exp_name ctx --use_context --max_len 32 --ctx_max_len 48 --epochs 12 --patience 4"),
+        # 上下文融合（自主改进）：BERT 句对输入 (完整句子, 短语)，交叉注意力
+        # 做词级跨段交互。TextCNN/BiLSTM 已各有两组对照，融合实验聚焦 BERT。
         ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 96 --batch_size 24 --epochs 2"),
     ],
 }
