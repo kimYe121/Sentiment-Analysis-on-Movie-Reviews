@@ -89,12 +89,13 @@ def run_training(model, optimizer, train_iter, val_ids: np.ndarray, val_labels: 
         row = {
             "epoch": epoch,
             "train_loss": total_loss / max(seen, 1),
+            "val_loss": val_loss,
             "val_acc": val_acc,
             "val_macro_f1": val_macro_f1,
             "time_s": round(time.time() - t0, 1),
         }
         history.append(row)
-        print(f"[epoch {epoch:02d}] train_loss={row['train_loss']:.4f}  "
+        print(f"[epoch {epoch:02d}] train_loss={row['train_loss']:.4f}  val_loss={val_loss:.4f}  "
               f"val_acc={val_acc:.4f}  val_macro_f1={val_macro_f1:.4f}  "
               f"耗时={row['time_s']}s")
 
