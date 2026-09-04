@@ -5,15 +5,40 @@
 按计划顺序执行、跳过已完成的实验、打印进度。
 
 用法：
-    python scripts/run_experiments.py --group context          # 上下文融合实验（自主改进）
-    python scripts/run_experiments.py --group base             # 三模型正式结果
-    python scripts/run_experiments.py --group all --dry_run    # 预览全部命令
+    python scripts/run_experiments.py --group <组名>          # 跑某一组（自动跳过已完成）
+    python scripts/run_experiments.py --group all             # 跑全部组
+    python scripts/run_experiments.py --group all --dry_run   # 只预览命令，不执行
+    python scripts/run_experiments.py --group base --force    # 强制重跑（忽略已完成）
 
-实验组说明：
-- base:       三个模型的正式结果（stratified 划分）
-- nn_compare: BiLSTM 手写实现 vs nn.LSTM 库实现，同一结构只换循环核心
-- grouped:    TextCNN / BiLSTM 在句级分组划分下的无泄漏指标
-- context:    上下文融合（自主改进）：BERT 句对输入 (完整句子, 短语)
+实验组一览（耗时为本机 RTX 4060 量级）：
+    base        三模型正式结果（stratified 9:1 划分）                 约 40 分钟
+                textcnn/base、bilstm/base、bert/base
+    nn_compare  BiLSTM 手写实现 vs nn.LSTM 库实现（同构对照）          约 1 分钟
+                bilstm/base_nn
+    grouped     句级分组划分对照（无泄漏指标，防泄漏分析用）           约 10 分钟
+                textcnn/base_grouped、bilstm/base_grouped
+    context     BERT 句对上下文融合 (完整句子, 短语)（自主改进实验）   约 20 分钟
+                bert/ctx
+
+从零复现全部结果的完整流水线：
+    # ① 统一划分（首次运行一次即可，data/split/ 生成名单缓存）
+    python src/common/split.py
+    # ② 全部训练实验（约 70 分钟；BERT 需先设 HF 镜像，设一次当窗口有效）
+    $env:HF_ENDPOINT = "https://hf-mirror.com"
+    python scripts/run_experiments.py --group all
+    # ③ 三模型概率平均集成（约 10 秒）
+    python scripts/ensemble.py
+    # ④ 汇总表 comparison.csv + 全部报告图
+    python scripts/make_figures.py
+
+说明：
+- 断点续跑：每个实验完成后落盘 metrics.json，重新执行同一命令会自动跳过
+  已完成部分；中途 Ctrl+C 中断后，直接重跑同一条命令即可从断点继续。
+- 单独调试某个模型时可直接运行训练脚本，各训练脚本的 docstring 里有
+  该模型的完整参数示例（如 train_bilstm.py / train_bert.py）。
+- 队友的经典模型（src/models/classical/）无编排组，单独运行，例如：
+  python src/models/classical/train_linear_svc.py --exp_name base
+  结果同样按契约落盘，会被 make_figures 自动并入汇总表和图表。
 """
 
 from __future__ import annotations
