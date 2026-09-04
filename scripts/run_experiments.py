@@ -45,7 +45,7 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
     "context": [
         # 上下文融合（自主改进）：BERT 句对输入 (完整句子, 短语)，交叉注意力
         # 做词级跨段交互。TextCNN/BiLSTM 已各有两组对照，融合实验聚焦 BERT。
-        ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 96 --batch_size 32 --epochs 2"),
+        ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 96 --batch_size 48 --epochs 2"),
     ],
 }
 
