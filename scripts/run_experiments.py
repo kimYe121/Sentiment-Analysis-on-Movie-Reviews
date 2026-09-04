@@ -5,17 +5,15 @@
 按计划顺序执行、跳过已完成的实验、打印进度。
 
 用法：
-    python scripts/run_experiments.py --group nn_compare          # 手写 vs 库对照
-    python scripts/run_experiments.py --group grouped             # 分组划分对照（无泄漏）
-    python scripts/run_experiments.py --group ablation            # 参数消融矩阵（课设硬性要求）
-    python scripts/run_experiments.py --group ablation --dry_run  # 只打印将执行的命令
-    python scripts/run_experiments.py --group all                 # 全部（含 base，从零复现用）
+    python scripts/run_experiments.py --group context          # 上下文融合实验（自主改进）
+    python scripts/run_experiments.py --group base             # 三模型正式结果
+    python scripts/run_experiments.py --group all --dry_run    # 预览全部命令
 
 实验组说明：
 - base:       三个模型的正式结果（stratified 划分）
 - nn_compare: BiLSTM 手写实现 vs nn.LSTM 库实现，同一结构只换循环核心
-- grouped:    三模型在句级分组划分下的无泄漏指标
-- ablation:   每个模型固定其他参数、每次只改一个参数，与 base 对比即为该参数的影响
+- grouped:    TextCNN / BiLSTM 在句级分组划分下的无泄漏指标
+- context:    上下文融合（自主改进）：短语 + 所在完整句子双输入
 """
 
 from __future__ import annotations
@@ -44,18 +42,11 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
         ("dl", "textcnn", "base_grouped", "src/models/deep_learning/train_textcnn.py --exp_name base_grouped --mode grouped"),
         ("dl", "bilstm", "base_grouped", "src/models/deep_learning/train_bilstm.py --exp_name base_grouped --mode grouped"),
     ],
-    "ablation": [
-        # 课设硬性要求：每个模型改一个参数做对比（与同模型 base 相比即得该参数的影响）。
-        # 精简原则：每个模型只留最有解释力的参数，总计约 30 分钟 GPU 时间。
-        # ---- TextCNN：模型容量 与 正则化（base 默认 dropout=0.7，用 0.5 作低正则对照）----
-        ("dl", "textcnn", "filters256", "src/models/deep_learning/train_textcnn.py --exp_name filters256 --num_filters 256"),
-        ("dl", "textcnn", "dropout05", "src/models/deep_learning/train_textcnn.py --exp_name dropout05 --dropout 0.5"),
-        # ---- BiLSTM：容量 与 池化方式（mean 对照 attention，支撑报告改进叙事）----
-        ("dl", "bilstm", "hidden256", "src/models/deep_learning/train_bilstm.py --exp_name hidden256 --hidden_size 256"),
-        ("dl", "bilstm", "pool_mean", "src/models/deep_learning/train_bilstm.py --exp_name pool_mean --pooling mean"),
-        # ---- BERT：只保留一个配置对比（约 15 分钟），满足"每个算法都有参数对比"；
-        #      想进一步省时间可删除本行，BERT 以 base 的复现结果参与对比 ----
-        ("dl", "bert", "maxlen32", "src/models/deep_learning/train_bert.py --exp_name maxlen32 --max_len 32 --epochs 2"),
+    "context": [
+        # 上下文融合（自主改进）：短语 + 所在完整句子。针对短语脱离语境
+        # 无法判断的问题，预期显著提升，是有提升效果的改进证据。
+        ("dl", "bilstm", "ctx", "src/models/deep_learning/train_bilstm.py --exp_name ctx --use_context --max_len 32 --ctx_max_len 48 --epochs 12 --patience 4"),
+        ("dl", "bert", "ctx", "src/models/deep_learning/train_bert.py --exp_name ctx --use_context --max_len 80 --batch_size 24 --epochs 2"),
     ],
 }
 

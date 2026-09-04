@@ -137,18 +137,18 @@ SentimentAnalysisOnMovieReviews/
 
 **原则：训练脚本只负责训练与落盘；汇总工具只读文件、不参与训练。**
 
-### 可视化产物清单（报告配图与支撑章节的对应关系）
+### 可视化产物清单（统一由 `scripts/make_figures.py` 生成）
 
-| 可视化 | 生成方式 | 支撑报告章节 |
-|---|---|---|
-| `results/eda_label_distribution.png` | `scripts/visualize_eda.py` | 数据分析：类别不均衡（中性 51%） |
-| `results/eda_length_distribution.png` | `scripts/visualize_eda.py` | 数据分析：句长分布 → max_len 截断决策 |
-| `results/comparison_metrics.png` | `aggregator.py` | 模型对比：accuracy / macro F1 |
-| `results/training_curves.png` | `aggregator.py` | 训练过程与过拟合分析 |
-| `results/confusion_matrices.png` | `aggregator.py` | 误差分析：相邻类别混淆 |
-| `results/ablation_comparison.png` | `aggregator.py` | 消融分析：各参数对 macro F1 的影响 |
-| `results/attention_heatmap_*.png` | `scripts/visualize_attention.py` | 模型设计亮点：注意力权重的可解释性 |
-| `results/comparison.csv` | `aggregator.py` | 全部实验的数值汇总表 |
+| 可视化 | 支撑报告章节 |
+|---|---|
+| `results/eda_label_distribution.png` | 数据分析：类别不均衡（中性 51%） |
+| `results/eda_length_distribution.png` | 数据分析：句长分布 → max_len 截断决策 |
+| `results/model_comparison.png` | 模型对比：accuracy / macro F1 + 多数类基线 |
+| `results/training_curves.png` | 训练过程与过拟合治理分析 |
+| `results/per_class_f1.png` | 类别不均衡：各类别 F1 对比（两端类别短板） |
+| `results/error_structure.png` | 误差分析：错误集中于相邻情感等级（序数性质） |
+| `results/attention_heatmap_*.png` | 模型设计亮点：注意力权重的可解释性 |
+| `results/comparison.csv` | 全部实验的数值汇总表（`src/evaluation/aggregator.py` 生成） |
 
 ## 七、快速开始
 
@@ -185,33 +185,26 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"
 python src/common/split.py
 ```
 
-### 3. 跑实验：两种方式
-
-**方式 A（推荐）：编排脚本按清单批量跑**
+### 3. 跑实验与出图：三个入口脚本
 
 ```bash
-python scripts/run_experiments.py --group ablation --dry_run   # 预览命令，不执行
-python scripts/run_experiments.py --group ablation             # 正式执行（自动跳过已完成）
+# ① 训练实验（唯一训练入口；实验组见脚本 GROUPS：base / nn_compare / grouped / context）
+python scripts/run_experiments.py --group context --dry_run   # 预览命令
+python scripts/run_experiments.py --group context             # 正式执行（自动跳过已完成）
+
+# ② 报告图表（唯一出图入口：EDA、主对比、训练曲线、各类别F1、误差结构、注意力热力图）
+python scripts/make_figures.py
+
+# ③ 概率集成（读取各实验保存的 probs_val.npy 做平均，生成 ensemble 实验）
+python scripts/ensemble.py
 ```
 
-实验组：`base`（正式结果）/ `nn_compare`（手写 vs 库）/ `grouped`（无泄漏对照）/ `ablation`（消融矩阵）/ `all`。新增实验只需在脚本的 `GROUPS` 里加一行。
-
-**方式 B：手动跑单个实验**
+也可以绕过编排脚本手动跑单个实验（调试用）：
 
 ```bash
-# TextCNN（全手写，启动时打印与 nn.Conv1d 的一致性验证）
 python src/models/deep_learning/train_textcnn.py --exp_name base
-
-# BiLSTM（手写 LSTM 单元 + 注意力池化；batch 128 已是默认值）
-python src/models/deep_learning/train_bilstm.py --exp_name base
-
-# BiLSTM 手写 vs 库对照实验
-python src/models/deep_learning/train_bilstm.py --exp_name base_nn --impl nn
-
-# BERT 微调（模型权重来自 HuggingFace，训练循环手写）
+python src/models/deep_learning/train_bilstm.py --exp_name ctx --use_context
 $env:HF_ENDPOINT="https://hf-mirror.com"; python src/models/deep_learning/train_bert.py --exp_name base
-
-# 快速调试：任何脚本加 --max_samples 20000 --epochs 1
 ```
 
 ### 4. 训练传统机器学习模型（经典 ML 组）

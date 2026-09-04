@@ -210,6 +210,47 @@ class BiLSTMClassifier(nn.Module):
         return self.fc(self.dropout(pooled))
 
 
+class ContextBiLSTMClassifier(nn.Module):
+    """双通道上下文融合 BiLSTM（自主设计，针对短语级情感的语境缺失问题）。
+
+    动机：Kaggle 短语常是完整句子的片段（如 "but not much of a story"），
+    仅凭短语本身缺乏评价对象与转折语义。设计：
+    - 短语通道与句子上下文通道**共享**词嵌入与 BiLSTM 编码器（语义空间
+      一致、参数减半），各自接一个独立的加性注意力头做池化；
+    - 两通道表示拼接后过 dropout 与全连接分类。
+    """
+
+    def __init__(
+        self,
+        vocab_size: int,
+        embed_dim: int = 128,
+        hidden_size: int = 128,
+        num_classes: int = 5,
+        dropout: float = 0.6,
+        padding_idx: int = 0,
+    ) -> None:
+        super().__init__()
+        self.padding_idx = padding_idx
+        self.embedding = ManualEmbedding(vocab_size, embed_dim, padding_idx)
+        self.encoder = ManualBiLSTM(embed_dim, hidden_size, bidirectional=True)
+        out_size = self.encoder.output_size()
+        self.attn_phrase = ManualAttention(out_size)
+        self.attn_context = ManualAttention(out_size)
+        self.dropout = ManualDropout(dropout)
+        self.fc = ManualLinear(out_size * 2, num_classes)
+
+    def _encode(self, ids: torch.Tensor, attn: ManualAttention) -> torch.Tensor:
+        mask = ids != self.padding_idx
+        hidden = self.encoder(self.embedding(ids))
+        return attn(hidden, mask)
+
+    def forward(self, phrase_ids: torch.Tensor, context_ids: torch.Tensor) -> torch.Tensor:
+        phrase_repr = self._encode(phrase_ids, self.attn_phrase)
+        context_repr = self._encode(context_ids, self.attn_context)
+        fused = torch.cat([phrase_repr, context_repr], dim=1)
+        return self.fc(self.dropout(fused))
+
+
 # --------------------------------------------------------------------- 验证
 def _copy_cell_into(cell: ManualLSTMCell, prefix: str, lstm: nn.LSTM) -> None:
     with torch.no_grad():
