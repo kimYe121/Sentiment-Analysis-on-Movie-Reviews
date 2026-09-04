@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from common.dl_data import BatchIterator, Vocab
-from common.dl_train import predict, run_training
+from common.dl_train import predict_probs, run_training
 from common.experiment import ExperimentLogger
 from common.preprocess import prepare_dataframe
 from common.split import ensure_split
@@ -112,15 +112,17 @@ def main() -> None:
     logger.save_model(model.state_dict())
 
     # -------------------------------------------------- 评估与落盘
-    _, val_pred = predict(model, x_val, device)
+    val_probs = predict_probs(model, x_val, device)
+    val_pred = val_probs.argmax(axis=1)
     metrics = evaluate_predictions(pd.Series(y_val), pd.Series(val_pred))
     metrics.update({"best_epoch": best_epoch, "train_seconds": train_seconds})
     logger.save_metrics(metrics)
     logger.save_predictions(val_part["PhraseId"], y_val, val_pred)
 
     x_test = vocab.encode(test_df["Phrase"], args.max_len)
-    _, test_pred = predict(model, x_test, device)
-    logger.save_submission(test_df["PhraseId"], test_pred)
+    test_probs = predict_probs(model, x_test, device)
+    logger.save_probs(val_probs, test_probs)
+    logger.save_submission(test_df["PhraseId"], test_probs.argmax(axis=1))
     logger.print_summary(metrics)
 
 
