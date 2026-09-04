@@ -69,7 +69,8 @@ def run_group(group: str, dry_run: bool, force: bool) -> None:
             continue
 
         t0 = time.time()
-        result = subprocess.run(shlex.split(cmd), cwd=ROOT)
+        # Windows 无法直接执行 .py，统一用当前解释器启动训练脚本
+        result = subprocess.run([sys.executable, *shlex.split(cmd)], cwd=ROOT)
         elapsed = time.time() - t0
         if result.returncode != 0:
             print(f"\n[中止] 实验 {exp_name} 失败（exit={result.returncode}），剩余实验未执行。")
