@@ -27,13 +27,15 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
         submission.csv ──▶ Kaggle 官方分数          报告直接引用的表格与图
 ```
 
-### 1.2 分工
+### 1.2 团队分工
 
-| 成员 | 负责内容 |
-|---|---|
-| 深度学习组（本人） | 三个深度模型的实现（TextCNN / BiLSTM+Attention 全手写，BERT 手写微调协议）；全部公共基础设施：统一划分、实验产物契约、汇总与可视化、实验编排脚本；BiLSTM 效率优化（3.4×）与深度学习侧全部实验 |
-| 经典 ML 组（队友） | TF-IDF 特征管线之上的 **LinearSVC** 与 **RandomForest** 两个模型的完整实现（参照 `train_logistic_regression.py` 模板，统一划分、统一落盘契约、统一指标）；另修复了划分缓存命名的缺陷——缓存文件名纳入 val_ratio 与 seed，避免换参后静默复用旧划分 |
-| 协作约定 | 两组共用同一份划分名单与同一套产物格式，`make_figures.py` 自动将两侧实验合并进同一张对比表与全部图表 |
+| 方向 | 成员 | 负责内容 |
+|---|---|---|
+| 深度学习 | 成员 1 | TextCNN 与 BiLSTM+Attention 的手写实现（含与 nn 库实现的数值一致性验证）、BERT 微调流程（手写训练循环与调度器）、共享基础设施（统一划分 / 实验产物契约 / 汇总可视化 / 实验编排脚本）、BiLSTM 训练效率优化 |
+| 经典机器学习 | 成员 2 | LinearSVC 与 RandomForest 的完整实现（TF-IDF 特征管线，统一划分与落盘契约）；划分缓存参数化命名修复（避免换参后静默复用旧划分） |
+| 经典机器学习 | 成员 3 | Logistic Regression 与 Multinomial Naive Bayes（进行中）；经典模型的 grouped 划分对照实验（进行中） |
+
+协作约定：三个方向共用同一份划分名单与同一套产物格式，`make_figures.py` 自动将全部实验合并进同一张对比表与图表。
 
 ### 1.3 必须分清的四组概念
 
@@ -44,12 +46,12 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
 | test.tsv 的用途 | 无标签，本地算不了指标；唯一用途是每个实验生成的 `submission.csv` 传 Kaggle 换官方分数 |
 | 手写实现 vs `--impl nn` | **正式结果全部由手写模型产出**；`--impl nn` 只是对照实验（同结构只换循环核心），用于证明手写实现正确（精度一致）并量化与 cuDNN 的速度差距（约 19 倍） |
 
-### 1.4 深度学习部分的"设计工作"构成
+### 1.4 技术实现要点
 
 1. **手写组件层**（`layers.py`/`textcnn.py`/`bilstm.py`）：嵌入查表、线性层、dropout、softmax 交叉熵、一维卷积（unfold+einsum）、LSTM 单元与双向展开、注意力池化——全部不调用 nn.* 现成模块，每个组件附与库实现的**数值一致性验证**（训练启动时自动打印，最大误差 3.7e-09 ~ 3.6e-07）；
 2. **手写管线与训练循环**（`dl_data.py`/`dl_train.py`）：词表、批迭代器（不用 DataLoader）、前向/反向/梯度裁剪/早停/最优权重保留；
 3. **方法学设计**：双划分防泄漏体系、实验产物契约、结果自动汇总——保证"对比实验"这一课设要求成立；
-4. **自主改进**：BiLSTM 效率优化（输入投影外提 + 批内动态长度，155s→45s/轮，3.4×，数学等价）；
+4. **效率优化**：BiLSTM 训练（输入投影外提 + 批内动态长度，155s→45s/轮，3.4×，数学等价）；
 5. **BERT 对照项**：模型权重来自 HuggingFace（复现 Devlin et al. 2019 微调协议），训练循环/调度器/混合精度手写。
 
 ---
@@ -61,6 +63,8 @@ data/train.tsv ──▶ 统一划分 src/common/split.py（stratified / grouped
 | base（主实验） | TextCNN / BiLSTM / BERT 各跑一次（stratified 9:1） | 三种表示学习范式（局部卷积 / 序列建模 / 预训练微调）在该任务上的正式成绩 |
 | nn_compare（实现对照） | BiLSTM 手写实现 vs nn.LSTM，同一结构只换循环核心 | 手写实现是否正确（精度等价性）；与 cuDNN 的工程性能差距有多大（约 19 倍） |
 | grouped（划分对照） | TextCNN / BiLSTM 按句子分组重跑 | 短语重叠泄漏使分层随机指标虚高多少（4.8~6.4pt），论证评估协议的影响 |
+| classical-base（经典基线） | Logistic Regression / MultinomialNB / LinearSVC / RandomForest（TF-IDF 特征） | 传统机器学习基线，与深度模型同表横向对比 |
+| classical-grouped（经典 × 划分对照，进行中） | 经典模型的 grouped 划分版本 | 检验泄漏效应对传统方法是否同样显著 |
 | context（上下文融合） | BERT 句对输入 (完整句子, 短语) | 标签函数是否依赖语境 → 负结果：两种融合机制均未超越基线，SST 标注以短语为单位（见实验结果节的讨论） |
 | ensemble（集成） | 三个 base 模型的预测概率平均 | 系统级集成的收益与成员错误相关性的关系 |
 
@@ -106,7 +110,7 @@ SentimentAnalysisOnMovieReviews/
     │   ├── dl_data.py            # 手写词表、编码、批迭代器（含批内动态长度）
     │   └── dl_train.py           # 手写训练循环、梯度裁剪、早停
     └── models/
-        ├── classical/            # 传统机器学习（经典 ML 组负责）
+        ├── classical/            # 传统机器学习基线（TF-IDF 特征 + 四个经典模型）
         │   ├── train_logistic_regression.py   # 参考实现/模板
         │   ├── train_multinomial_nb.py / train_linear_svc.py / train_random_forest.py
         └── deep_learning/
@@ -202,7 +206,7 @@ python src/models/deep_learning/train_bilstm.py --exp_name ctx --use_context
 $env:HF_ENDPOINT="https://hf-mirror.com"; python src/models/deep_learning/train_bert.py --exp_name base
 ```
 
-### 4. 训练传统机器学习模型（经典 ML 组）
+### 4. 训练经典机器学习模型
 
 ```bash
 python src/models/classical/train_logistic_regression.py --exp_name base
@@ -211,7 +215,7 @@ python src/models/classical/train_logistic_regression.py --exp_name base
 
 ## 八、模型路线与手写实现说明
 
-### 传统机器学习（经典 ML 组）
+### 传统机器学习（TF-IDF 基线）
 
 - TF-IDF + Logistic Regression（已提供参考实现）
 - TF-IDF + Multinomial Naive Bayes / Linear SVC / Random Forest
