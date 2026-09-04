@@ -63,6 +63,16 @@ def split_dataframe(df: pd.DataFrame, val_ids: np.ndarray) -> tuple[pd.DataFrame
     return train_part, val_part
 
 
+def _split_stem(mode: str, val_ratio: float, seed: int) -> str:
+    """划分文件名的稳定主干，编码 mode/val_ratio/seed。
+
+    把 val_ratio / seed 纳入文件名，避免改动参数后静默复用旧缓存
+    （此前只按 mode 命名，换 val_ratio 或 seed 会读到旧的 0.1 划分）。
+    """
+    ratio = f"{val_ratio:g}"  # 0.1 -> "0.1"，去除浮点噪声
+    return f"{mode}_r{ratio}_s{seed}"
+
+
 def ensure_split(
     df: pd.DataFrame,
     mode: str = "stratified",
@@ -70,15 +80,16 @@ def ensure_split(
     seed: int = 42,
     split_dir: str | Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """获取统一的训练/验证划分（文件不存在时按相同种子生成并落盘）。"""
+    """获取统一的训练/验证划分（按 mode/val_ratio/seed 命名缓存，不存在则生成并落盘）。"""
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"不支持的划分方式: {mode}，可选 {SUPPORTED_MODES}")
 
     ensure_dirs()
     split_dir = Path(split_dir) if split_dir is not None else SPLIT_DIR
     split_dir.mkdir(parents=True, exist_ok=True)
-    id_path = split_dir / f"val_phrase_ids_{mode}.csv"
-    meta_path = split_dir / f"split_meta_{mode}.json"
+    stem = _split_stem(mode, val_ratio, seed)
+    id_path = split_dir / f"val_phrase_ids_{stem}.csv"
+    meta_path = split_dir / f"split_meta_{stem}.json"
 
     if id_path.exists():
         val_ids = pd.read_csv(id_path)["PhraseId"].to_numpy()
