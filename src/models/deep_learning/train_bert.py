@@ -45,9 +45,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--model_name", type=str, default="bert-base-uncased")
     parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=48)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--max_len", type=int, default=64)
+    parser.add_argument("--max_len", type=int, default=48, help="短语任务 48 已覆盖 99.98%% 样本；ctx 句对模式在编排脚本中显式传 96")
     parser.add_argument("--use_context", action="store_true",
                         help="启用句对输入 (完整句子, 短语) 的上下文融合")
     parser.add_argument("--warmup_ratio", type=float, default=0.1)
@@ -110,8 +110,10 @@ def batch_predict(model, ids, mask, device, batch_size: int, use_amp: bool,
     with torch.no_grad():
         for start in range(0, len(ids), batch_size):
             sl = slice(start, start + batch_size)
-            xb = torch.from_numpy(ids[sl]).to(device)
-            mb = torch.from_numpy(mask[sl]).to(device)
+            # 批内动态长度裁剪（与训练一致）
+            valid = max(int(mask[sl].sum(axis=1).max()), 4)
+            xb = torch.from_numpy(np.ascontiguousarray(ids[sl][:, :valid])).to(device)
+            mb = torch.from_numpy(np.ascontiguousarray(mask[sl][:, :valid])).to(device)
             with torch.amp.autocast("cuda", enabled=use_amp):
                 logits = model(input_ids=xb, attention_mask=mb).logits
                 if labels is not None:
@@ -193,9 +195,12 @@ def main() -> None:
         order = rng.permutation(len(x_train))
         for start in range(0, len(order), args.batch_size):
             index = order[start:start + args.batch_size]
-            xb = torch.from_numpy(x_train[index]).to(device)
-            mb = torch.from_numpy(m_train[index]).to(device)
-            yb = torch.from_numpy(y_train[index]).to(device)
+            # 批内动态长度：截去批内全为 0 的尾部。短语平均仅约 7 词，
+            # 固定 max_len 会让大半计算花在 padding 上（与 BiLSTM 同款优化）。
+            valid = max(int(m_train[index].sum(axis=1).max()), 4)
+            xb = torch.from_numpy(np.ascontiguousarray(x_train[index][:, :valid])).to(device)
+            mb = torch.from_numpy(np.ascontiguousarray(m_train[index][:, :valid])).to(device)
+            yb = torch.from_numpy(np.array(y_train[index])).to(device)
 
             with torch.amp.autocast("cuda", enabled=use_amp):
                 logits = model(input_ids=xb, attention_mask=mb).logits
