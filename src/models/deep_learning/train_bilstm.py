@@ -99,9 +99,14 @@ def main() -> None:
     y_train = train_part["Sentiment"].to_numpy()
     y_val = val_part["Sentiment"].to_numpy()
     if args.use_context:
+        # 干净上下文：每句最长短语重建完整句子（覆盖 prepare_dataframe 的拼接版）
+        from common.preprocess import build_sentence_context
+        train_part = build_sentence_context(train_part)
+        val_part = build_sentence_context(val_part)
+        test_df = build_sentence_context(test_df)
         x_ctx_train = vocab.encode(train_part["sentence_context"], args.ctx_max_len)
         x_ctx_val = vocab.encode(val_part["sentence_context"], args.ctx_max_len)
-        print(f"[上下文] 双通道融合：短语 max_len={args.max_len}，上下文 max_len={args.ctx_max_len}")
+        print(f"[上下文] 双通道融合（最长短语重建）：短语 max_len={args.max_len}，上下文 max_len={args.ctx_max_len}")
     else:
         x_ctx_train = x_ctx_val = None
 

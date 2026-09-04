@@ -73,12 +73,9 @@ def set_lr(optimizer: torch.optim.Optimizer, base_lrs: list[float], scale: float
 
 
 def add_raw_context(df: pd.DataFrame) -> pd.DataFrame:
-    """按句子聚合原始短语作为上下文（BERT 用原始文本，不做清洗）。"""
-    out = df.copy()
-    out["sentence_context"] = out.groupby("SentenceId")["Phrase"].transform(
-        lambda s: " ".join(str(v) for v in s if str(v).strip())
-    )
-    return out
+    """按句重建原始完整句子作为上下文（BERT 用原始文本，不做清洗）。"""
+    from common.preprocess import build_sentence_context
+    return build_sentence_context(df)
 
 
 def encode_texts(tokenizer, texts, max_len: int, batch_size: int = 1024,
