@@ -10,7 +10,7 @@
     python scripts/run_experiments.py --group all --dry_run   # 只预览命令，不执行
     python scripts/run_experiments.py --group base --force    # 强制重跑（忽略已完成）
 
-实验组一览（耗时为本机 RTX 4060 量级）：
+实验组一览（耗时为本机 RTX 4060 / CPU 量级）：
     base        三模型正式结果（stratified 9:1 划分）                 约 40 分钟
                 textcnn/base、bilstm/base、bert/base
     nn_compare  BiLSTM 手写实现 vs nn.LSTM 库实现（同构对照）          约 1 分钟
@@ -19,6 +19,8 @@
                 textcnn/base_grouped、bilstm/base_grouped
     context     BERT 句对上下文融合 (完整句子, 短语)（自主改进实验）   约 20 分钟
                 bert/ctx
+    classical   经典机器学习四模型：base + grouped 泄漏对照            约 10~15 分钟（CPU）
+                LR / MultinomialNB / LinearSVC / RandomForest 各两个划分
 
 从零复现全部结果的完整流水线：
     # ① 统一划分（首次运行一次即可，data/split/ 生成名单缓存）
@@ -36,9 +38,8 @@
   已完成部分；中途 Ctrl+C 中断后，直接重跑同一条命令即可从断点继续。
 - 单独调试某个模型时可直接运行训练脚本，各训练脚本的 docstring 里有
   该模型的完整参数示例（如 train_bilstm.py / train_bert.py）。
-- 队友的经典模型（src/models/classical/）无编排组，单独运行，例如：
-  python src/models/classical/train_linear_svc.py --exp_name base
-  结果同样按契约落盘，会被 make_figures 自动并入汇总表和图表。
+- 经典模型已有编排组（--group classical），无需再手动逐个运行；
+  其结果同样按契约落盘，会被 make_figures 自动并入汇总表和图表。
 """
 
 from __future__ import annotations
@@ -66,6 +67,18 @@ GROUPS: dict[str, list[tuple[str, str, str, str]]] = {
         # 防泄漏对照。BERT 版已裁撤（省 25 分钟），两项已完成的数据足够支撑泄漏分析
         ("dl", "textcnn", "base_grouped", "src/models/deep_learning/train_textcnn.py --exp_name base_grouped --mode grouped"),
         ("dl", "bilstm", "base_grouped", "src/models/deep_learning/train_bilstm.py --exp_name base_grouped --mode grouped"),
+    ],
+    "classical": [
+        # 经典机器学习：四个模型 base（主表）+ grouped（泄漏对照），
+        # CPU 训练，全程约 10~15 分钟。SVC/RF 由成员 2 实现，LR/MNB 由成员 3 实现。
+        ("classical", "logistic_regression", "base", "src/models/classical/train_logistic_regression.py --exp_name base"),
+        ("classical", "multinomial_nb", "base", "src/models/classical/train_multinomial_nb.py --exp_name base"),
+        ("classical", "linear_svc", "base", "src/models/classical/train_linear_svc.py --exp_name base"),
+        ("classical", "random_forest", "base", "src/models/classical/train_random_forest.py --exp_name base"),
+        ("classical", "logistic_regression", "base_grouped", "src/models/classical/train_logistic_regression.py --exp_name base_grouped --mode grouped"),
+        ("classical", "multinomial_nb", "base_grouped", "src/models/classical/train_multinomial_nb.py --exp_name base_grouped --mode grouped"),
+        ("classical", "linear_svc", "base_grouped", "src/models/classical/train_linear_svc.py --exp_name base_grouped --mode grouped"),
+        ("classical", "random_forest", "base_grouped", "src/models/classical/train_random_forest.py --exp_name base_grouped --mode grouped"),
     ],
     "context": [
         # 上下文融合（自主改进）：BERT 句对输入 (完整句子, 短语)，交叉注意力
