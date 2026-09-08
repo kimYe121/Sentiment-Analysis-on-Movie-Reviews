@@ -138,16 +138,17 @@ SentimentAnalysisOnMovieReviews/
 
 ### 可视化产物清单（统一由 `scripts/make_figures.py` 生成）
 
-| 可视化 | 支撑报告章节 |
-|---|---|
-| `results/eda_label_distribution.png` | 数据分析：类别不均衡（中性 51%） |
-| `results/eda_length_distribution.png` | 数据分析：句长分布 → max_len 截断决策 |
-| `results/model_comparison.png` | 模型对比：accuracy / macro F1 + 多数类基线 |
-| `results/training_curves.png` | 训练过程与过拟合治理分析 |
-| `results/per_class_f1.png` | 类别不均衡：各类别 F1 对比（两端类别短板） |
-| `results/error_structure.png` | 误差分析：错误集中于相邻情感等级（序数性质） |
-| `results/attention_heatmap_*.png` | 模型设计亮点：注意力权重的可解释性 |
-| `results/comparison.csv` | 全部实验的数值汇总表（`make_figures.py` 生成） |
+| 可视化 | 排版 | 支撑报告章节 |
+|---|---|---|
+| `results/eda_label_distribution.png` | 单图 | 数据分析：类别不均衡（中性 51%） |
+| `results/eda_length_distribution.png` | 单图 | 数据分析：句长分布 → max_len 截断决策 |
+| `results/model_comparison.png` | 1×3 三联：(a) 全模型双指标总览 (b) 泄漏落差排序（本项目核心发现） (c) 深度 vs 经典排名 | 模型对比 / 泄漏效应 / 范式结论 |
+| `results/training_curves.png` | 1×2：损失 + 精度曲线 | 训练过程与过拟合治理分析 |
+| `results/per_class_f1.png` | 分组柱状 | 类别不均衡：各类别 F1（两端类别短板） |
+| `results/error_structure.png` | 1×2：六模型 ±1 错误占比 + BERT 误差距离分解 | 误差分析：序数性质 |
+| `results/confusion_side_by_side.png` | 1×2：BERT vs LR 行归一化混淆矩阵 | 误差分析：对角带状结构，范式同构 |
+| `results/attention_heatmap_*.png` | 网格 | 模型设计亮点：注意力权重的可解释性 |
+| `results/comparison.csv` | 表格 | 全部实验的数值汇总表（`make_figures.py` 生成） |
 
 ## 七、快速开始
 

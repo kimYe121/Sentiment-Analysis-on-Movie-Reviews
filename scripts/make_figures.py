@@ -124,38 +124,47 @@ def write_comparison_csv(experiments: list[dict], results_dir: Path) -> None:
 
 def plot_confusion_grid(experiments: list[dict], results_dir: Path,
                         max_cols: int = 3) -> None:
-    """各实验混淆矩阵拼图（原始计数）。"""
-    show = [e for e in experiments
-            if (e["dir"] / "pred_val.csv").exists() and (e["dir"] / "label_val.csv").exists()]
+    """混淆矩阵对照图：最强深度模型（BERT）vs 最强经典模型（LR），
+    按行归一化（召回率视角），百分比标注。1×2 排版，报告单栏友好。
+
+    论点：两个范式的错误都集中在主对角线 ±1 的带状区（序数性质），
+    错误形态几乎同构。
+    """
+    show = []
+    for spec in (("bert", "base"), ("logistic_regression", "base")):
+        e = pick(experiments, *spec)
+        if e and (e["dir"] / "pred_val.csv").exists():
+            show.append(e)
     if not show:
         return
-    n = len(show)
-    ncols = min(max_cols, n)
-    nrows = (n + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4.4 * nrows), squeeze=False)
-    for i, e in enumerate(show):
-        ax = axes[i // ncols][i % ncols]
+
+    LABEL_NAMES = ["负面", "偏负面", "中性", "偏正面", "正面"]
+    fig, axes = plt.subplots(1, len(show), figsize=(7.2 * len(show), 5.6), squeeze=False)
+    for ax, e in zip(axes[0], show):
         y_true = pd.read_csv(e["dir"] / "label_val.csv")["Sentiment"]
         y_pred = pd.read_csv(e["dir"] / "pred_val.csv")["pred"]
         labels = sorted(y_true.unique())
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
-        ax.imshow(cm, cmap="Blues")
-        ax.set_xticks(range(len(labels)), labels)
-        ax.set_yticks(range(len(labels)), labels)
-        ax.set_xlabel("Predicted")
-        ax.set_ylabel("True")
-        label = f"{e['model']}{'(+ctx)' if e['exp'] == 'ctx' else ''}"
-        ax.set_title(f"{label}/{e['exp']}", fontsize=10)
+        cm = confusion_matrix(y_true, y_pred, labels=labels).astype(float)
+        cm_norm = cm / cm.sum(axis=1, keepdims=True)   # 行归一化 = 各真实类的召回分布
+        im = ax.imshow(cm_norm, cmap="Blues", vmin=0, vmax=1)
+        ax.set_xticks(range(len(labels)), LABEL_NAMES)
+        ax.set_yticks(range(len(labels)), LABEL_NAMES)
+        ax.set_xlabel("预测类别")
+        ax.set_ylabel("真实类别")
+        name = "BERT（微调）" if e["model"] == "bert" else "Logistic Regression"
+        ax.set_title(f"{name} 混淆矩阵（行归一化，%）", fontsize=11)
         for r in range(cm.shape[0]):
             for c in range(cm.shape[1]):
-                ax.text(c, r, str(cm[r, c]), ha="center", va="center", fontsize=7,
-                        color="white" if cm[r, c] > cm.max() / 2 else "black")
-    for j in range(n, nrows * ncols):
-        axes[j // ncols][j % ncols].axis("off")
-    fig.tight_layout()
-    fig.savefig(results_dir / "confusion_matrices.png", dpi=150)
+                v = cm_norm[r, c] * 100
+                ax.text(c, r, f"{v:.1f}", ha="center", va="center", fontsize=8,
+                        color="white" if v > 50 else "black")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+    fig.suptitle("错误集中于主对角线 ±1 的带状区：情感等级的序数性（深度与经典范式同构）",
+                 fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(results_dir / "confusion_side_by_side.png", dpi=150)
     plt.close(fig)
-    print("[输出] confusion_matrices.png")
+    print("[输出] confusion_side_by_side.png")
 
 
 def pick(experiments: list[dict], model: str, exp: str) -> dict | None:
@@ -167,30 +176,85 @@ def pick(experiments: list[dict], model: str, exp: str) -> dict | None:
 
 # ---------------------------------------------------------------- 主对比图
 def plot_model_comparison(experiments: list[dict], results_dir: Path) -> None:
-    show = [e for e in experiments if e["exp"] in ("base", "ctx", "base_grouped", "ensemble")]
-    if not show:
+    """主对比 1×3 三联：
+    左 = 全部模型双指标总览（stratified）；
+    中 = 泄漏落差（stratified→grouped 的 macro F1 降幅，按大小排序）——
+         本项目最重要的方法学发现单独成面板；
+    右 = 深度 vs 经典的分界（stratified accuracy 排名条图，按范式着色）。
+    """
+    base_exps = [e for e in experiments if e["exp"] == "base"]
+    grouped = {e["model"]: e for e in experiments if e["exp"] == "base_grouped"}
+    if not base_exps:
         return
-    names = [e["display"] for e in show]
-    x = np.arange(len(show))
+    NICE = {"bert": "BERT", "bilstm": "BiLSTM", "textcnn": "TextCNN",
+            "logistic_regression": "LR", "linear_svc": "LinearSVC",
+            "random_forest": "RF", "multinomial_nb": "MNB", "ensemble": "Ensemble"}
+    DEEP = {"bert", "bilstm", "textcnn"}
+    base_exps = sorted(base_exps, key=lambda e: e["metrics"]["accuracy"], reverse=True)
+
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(19, 5.2),
+                                        gridspec_kw={"width_ratios": [1.35, 1, 1]})
+
+    # ---- 左：双指标总览 ----
+    names = [NICE.get(e["model"], e["model"]) for e in base_exps]
+    x = np.arange(len(base_exps))
     width = 0.38
-    fig, ax = plt.subplots(figsize=(max(8, 1.1 * len(show)), 5))
-    ax.bar(x - width / 2, [e["metrics"]["accuracy"] for e in show], width,
-           label="Accuracy", color="#4C72B0")
-    ax.bar(x + width / 2, [e["metrics"]["macro_f1"] for e in show], width,
-           label="Macro F1", color="#DD8452")
-    ax.axhline(0.512, ls="--", color="gray", lw=1, label="多数类基线 0.512")
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=25, ha="right")
-    ax.set_ylim(0, 0.85)
-    ax.set_ylabel("Score")
-    ax.set_title("模型对比（stratified 验证集）")
-    for xi, e in enumerate(show):
-        ax.text(xi - width / 2, e["metrics"]["accuracy"] + 0.01,
-                f"{e['metrics']['accuracy']:.3f}", ha="center", fontsize=7)
-        ax.text(xi + width / 2, e["metrics"]["macro_f1"] + 0.01,
-                f"{e['metrics']['macro_f1']:.3f}", ha="center", fontsize=7)
-    ax.legend(fontsize=9)
-    ax.grid(axis="y", alpha=0.3)
+    ax1.bar(x - width / 2, [e["metrics"]["accuracy"] for e in base_exps], width,
+            label="Accuracy", color="#4C72B0")
+    ax1.bar(x + width / 2, [e["metrics"]["macro_f1"] for e in base_exps], width,
+            label="Macro F1", color="#DD8452")
+    ax1.axhline(0.512, ls="--", color="gray", lw=1, label="多数类基线 0.512")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(names, rotation=30, ha="right", fontsize=9)
+    ax1.set_ylim(0, 0.8)
+    ax1.set_ylabel("Score")
+    ax1.set_title("(a) 各模型总览（stratified 验证集）", fontsize=11)
+    for xi, e in enumerate(base_exps):
+        ax1.text(xi - width / 2, e["metrics"]["accuracy"] + 0.01,
+                 f"{e['metrics']['accuracy']:.3f}", ha="center", fontsize=7)
+        ax1.text(xi + width / 2, e["metrics"]["macro_f1"] + 0.01,
+                 f"{e['metrics']['macro_f1']:.3f}", ha="center", fontsize=7)
+    ax1.legend(fontsize=8)
+    ax1.grid(axis="y", alpha=0.3)
+
+    # ---- 中：泄漏落差 ----
+    drops = []
+    for e in base_exps:
+        g = grouped.get(e["model"])
+        if g:
+            drops.append((NICE.get(e["model"], e["model"]),
+                          (e["metrics"]["macro_f1"] - g["metrics"]["macro_f1"]) * 100,
+                          NICE.get(e["model"], e["model"]) in {"BERT", "BiLSTM", "TextCNN"}))
+    drops.sort(key=lambda t: t[1])
+    bars = ax2.barh([t[0] for t in drops], [t[1] for t in drops],
+                    color=["#4C72B0" if t[2] else "#C44E52" for t in drops])
+    ax2.set_xlabel("Macro F1 降幅 (pt)：stratified → grouped")
+    ax2.set_title("(b) 泄漏效应的差异化影响", fontsize=11)
+    for bar, t in zip(bars, drops):
+        ax2.text(t[1] + 0.3, bar.get_y() + bar.get_height() / 2,
+                 f"-{t[1]:.1f}", va="center", fontsize=9)
+    ax2.axvline(0, color="black", lw=0.8)
+    ax2.grid(axis="x", alpha=0.3)
+    from matplotlib.patches import Patch
+    ax2.legend(handles=[Patch(color="#4C72B0", label="深度模型"),
+                        Patch(color="#C44E52", label="经典模型")],
+               fontsize=8, loc="lower right")
+    ax2.set_xlim(0, max(t[1] for t in drops) * 1.18)
+
+    # ---- 右：深度 vs 经典排名 ----
+    ranks = list(reversed(base_exps))
+    colors = ["#4C72B0" if e["model"] in DEEP else "#C44E52" for e in ranks]
+    ax3.barh([NICE.get(e["model"], e["model"]) for e in ranks],
+             [e["metrics"]["accuracy"] for e in ranks], color=colors)
+    ax3.set_xlabel("Accuracy (stratified)")
+    ax3.set_title("(c) 深度学习 vs 经典机器学习", fontsize=11)
+    ax3.axvline(0.512, ls="--", color="gray", lw=1)
+    ax3.set_xlim(0, 0.8)
+    ax3.grid(axis="x", alpha=0.3)
+    ax3.legend(handles=[Patch(color="#4C72B0", label="深度学习"),
+                        Patch(color="#C44E52", label="经典机器学习")],
+               fontsize=8, loc="lower right")
+
     fig.tight_layout()
     fig.savefig(results_dir / "model_comparison.png", dpi=150)
     plt.close(fig)
@@ -200,8 +264,7 @@ def plot_model_comparison(experiments: list[dict], results_dir: Path) -> None:
 # ---------------------------------------------------------------- 训练曲线
 def plot_training_curves(experiments: list[dict], results_dir: Path) -> None:
     curves = []
-    for spec in (("textcnn", "base"), ("bilstm", "base"), ("bert", "base"),
-                 ("bilstm", "ctx"), ("bert", "ctx")):
+    for spec in (("textcnn", "base"), ("bilstm", "base"), ("bert", "base")):
         e = pick(experiments, *spec)
         if e and (e["dir"] / "history.csv").exists():
             curves.append((spec, pd.read_csv(e["dir"] / "history.csv")))
@@ -210,15 +273,13 @@ def plot_training_curves(experiments: list[dict], results_dir: Path) -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for (model, exp), history in curves:
-        label = f"{model}{'(+ctx)' if exp == 'ctx' else ''}"
-        style = "--" if exp == "ctx" else "-"
-        axes[0].plot(history["epoch"], history["train_loss"], style, marker="o", ms=3,
-                     color=MODEL_COLORS.get(model), label=f"{label} train")
+        axes[0].plot(history["epoch"], history["train_loss"], marker="o", ms=3,
+                     color=MODEL_COLORS.get(model), label=f"{model} train")
         if "val_loss" in history.columns:
-            axes[0].plot(history["epoch"], history["val_loss"], style, marker="s", ms=3,
-                         color=MODEL_COLORS.get(model), alpha=0.55, label=f"{label} val")
-        axes[1].plot(history["epoch"], history["val_acc"], style, marker="o", ms=3,
-                     color=MODEL_COLORS.get(model), label=label)
+            axes[0].plot(history["epoch"], history["val_loss"], marker="s", ms=3,
+                         color=MODEL_COLORS.get(model), alpha=0.55, label=f"{model} val")
+        axes[1].plot(history["epoch"], history["val_acc"], marker="o", ms=3,
+                     color=MODEL_COLORS.get(model), label=model)
     axes[0].set_xlabel("Epoch")
     axes[0].set_ylabel("Cross-Entropy Loss")
     axes[0].set_title("训练 / 验证损失")
@@ -262,33 +323,67 @@ def plot_per_class_f1(experiments: list[dict], results_dir: Path) -> None:
 
 # ---------------------------------------------------------------- 误差结构
 def plot_error_structure(experiments: list[dict], results_dir: Path) -> None:
-    show = [e for e in experiments if e["exp"] in ("base", "ctx")
+    """误差结构 1×2 双联：
+    左 = 六个 base 模型的 ±1 错误占比横条图（全部 90%+ → 误差共性）；
+    右 = BERT 混淆矩阵的对角带占比特写（±1 / ±2+ 分解）。
+    """
+    show = [e for e in experiments if e["exp"] == "base"
             and (e["dir"] / "pred_val.csv").exists()]
     if not show:
         return
-    n = len(show)
-    fig, axes = plt.subplots(1, n, figsize=(4.6 * n, 4.6), squeeze=False)
-    distance_names = {1: "邻近类(±1)", 2: "相隔类(±2)", 3: "远距类(±3)", 4: "极远类(±4)"}
-    for ax, e in zip(axes[0], show):
+    ORDER = ["bert", "bilstm", "textcnn", "logistic_regression", "linear_svc",
+             "random_forest", "multinomial_nb"]
+    show.sort(key=lambda e: ORDER.index(e["model"]) if e["model"] in ORDER else 99)
+    NICE = {"bert": "BERT", "bilstm": "BiLSTM", "textcnn": "TextCNN",
+            "logistic_regression": "LR", "linear_svc": "LinearSVC",
+            "random_forest": "RF", "multinomial_nb": "MNB"}
+
+    def plus_minus_ratio(e):
         y_true = pd.read_csv(e["dir"] / "label_val.csv")["Sentiment"]
         y_pred = pd.read_csv(e["dir"] / "pred_val.csv")["pred"]
         errors = (y_true - y_pred).abs()
         errors = errors[errors > 0]
-        dist_counts = errors.value_counts().sort_index()
-        dists = [dist_counts.get(d, 0) for d in (1, 2, 3, 4)]
-        colors = ["#C44E52", "#DD8452", "#BCBD22", "#8172B3"]
-        bars = ax.bar([distance_names[d] for d in (1, 2, 3, 4)], dists, color=colors)
-        for bar, v in zip(bars, dists):
-            pct = v / max(len(errors), 1) * 100
-            ax.text(bar.get_x() + bar.get_width() / 2, v, f"{pct:.0f}%",
-                    ha="center", va="bottom", fontsize=9)
-        label = f"{e['model']}{'(+ctx)' if e['exp'] == 'ctx' else ''}"
-        ax.set_title(f"{label}\n错误样本 {len(errors)} 条", fontsize=10)
-        ax.set_ylabel("错误条数")
-        ax.tick_params(axis="x", labelsize=8)
-        ax.grid(axis="y", alpha=0.3)
-    fig.suptitle("误差结构：错误集中于相邻情感等级（序数性质），极少跨极混淆", fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+        return (errors == 1).mean() * 100, len(errors)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 4.8),
+                                   gridspec_kw={"width_ratios": [1.15, 1]})
+    names, ratios, counts = [], [], []
+    for e in show:
+        r, n = plus_minus_ratio(e)
+        names.append(NICE.get(e["model"], e["model"]))
+        ratios.append(r)
+        counts.append(n)
+    bars = ax1.barh(range(len(names)), ratios,
+                    color=[MODEL_COLORS.get(e["model"], "#4C72B0") for e in show])
+    ax1.set_yticks(range(len(names)), names)
+    ax1.invert_yaxis()
+    ax1.set_xlim(80, 100)
+    ax1.set_xlabel("错误中为相邻等级（±1）的比例 (%)")
+    ax1.set_title("六个模型：错误几乎全是相邻等级混淆", fontsize=11)
+    for bar, r, n in zip(bars, ratios, counts):
+        ax1.text(r + 0.3, bar.get_y() + bar.get_height() / 2,
+                 f"{r:.1f}%  (n={n})", va="center", fontsize=9)
+    ax1.grid(axis="x", alpha=0.3)
+
+    e_bert = pick(experiments, "bert", "base")
+    y_true = pd.read_csv(e_bert["dir"] / "label_val.csv")["Sentiment"]
+    y_pred = pd.read_csv(e_bert["dir"] / "pred_val.csv")["pred"]
+    errors = (y_true - y_pred).abs()
+    errors = errors[errors > 0]
+    dist = errors.value_counts()
+    near, mid, far = dist.get(1, 0), dist.get(2, 0), int(dist.get(3, 0) + dist.get(4, 0))
+    total = max(len(errors), 1)
+    bars = ax2.bar(["相邻等级 ±1", "相隔 ±2", "更远 ±3/±4"], [near, mid, far],
+                   color=["#C44E52", "#DD8452", "#8172B3"])
+    for bar, v in zip(bars, [near, mid, far]):
+        ax2.text(bar.get_x() + bar.get_width() / 2, v,
+                 f"{v} ({v / total * 100:.1f}%)", ha="center", va="bottom", fontsize=9)
+    ax2.set_ylabel("错误条数")
+    ax2.set_title(f"BERT 误差距离分解（错误共 {total} 条）", fontsize=11)
+    ax2.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("误差结构：情感强度是序数任务，跨级错误几乎不存在", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(results_dir / "error_structure.png", dpi=150)
     plt.close(fig)
     print("[输出] error_structure.png")
