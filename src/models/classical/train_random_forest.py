@@ -11,6 +11,7 @@
     --min_samples_split 内部节点再划分所需最小样本数（默认 2）
     --rf_max_features   每棵树随机采样的特征比例（默认 "sqrt"，可选 "log2" 或 0~1 浮点数）
     --n_jobs            并行训练线程数（默认 -1 利用全部 CPU 核心）
+    --svd_dim           TruncatedSVD 降维维度（默认 0 不降维，建议 200~500，可大幅提速）
 
 运行示例：
     # 全量训练
@@ -19,6 +20,8 @@
     python src/models/classical/train_random_forest.py --max_samples 20000 --n_estimators 50 --exp_name debug
     # 限制深度加速
     python src/models/classical/train_random_forest.py --max_depth 30 --exp_name d30
+    # SVD 降维提速（稀疏 5 万 -> 稠密 300）
+    python src/models/classical/train_random_forest.py --svd_dim 300 --exp_name svd300
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -64,6 +68,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ngram_max", type=int, default=2)
     parser.add_argument("--min_df", type=int, default=2, help="最小文档频率")
     parser.add_argument("--max_samples", type=int, default=0, help="调试用：>0 时只抽取训练子集")
+    parser.add_argument("--svd_dim", type=int, default=0,
+                        help="TruncatedSVD 降维维度（0 表示不降维），建议 200~500")
     return parser.parse_args()
 
 
@@ -95,6 +101,13 @@ def main() -> None:
     x_train = vectorizer.fit_transform(train_part["Phrase"])
     x_val = vectorizer.transform(val_part["Phrase"])
 
+    # TruncatedSVD 降维：稀疏 TF-IDF 直接喂 RF 极慢，降到稠密低维后大幅提速（且去噪）
+    svd = None
+    if args.svd_dim > 0:
+        svd = TruncatedSVD(n_components=args.svd_dim, random_state=args.seed)
+        x_train = svd.fit_transform(x_train)   # 稀疏 -> 稠密 (N, svd_dim)
+        x_val = svd.transform(x_val)
+
     # RF 的 max_depth=None 表示不限制；用 0 作为 "未设置" 哨兵，避免 argparse 传 None 麻烦
     max_depth = None if args.max_depth == 0 else args.max_depth
     # max_features 的字符串参数保持原样传；sklearn 会自行解析 "sqrt" / "log2" / "None"
@@ -125,7 +138,10 @@ def main() -> None:
     logger.save_metrics(metrics)
     logger.save_predictions(val_part["PhraseId"], val_part["Sentiment"], val_pred)
 
-    test_pred = model.predict(vectorizer.transform(test_df["Phrase"]))
+    x_test = vectorizer.transform(test_df["Phrase"])
+    if svd is not None:
+        x_test = svd.transform(x_test)
+    test_pred = model.predict(x_test)
     logger.save_submission(test_df["PhraseId"], test_pred)
     logger.print_summary(metrics)
 
